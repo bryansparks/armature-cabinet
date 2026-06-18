@@ -122,3 +122,38 @@ def test_dangling_context_ref_is_error(tmp_path):
     _write(tmp_path, files)
     r = validate_package(load_package(tmp_path))
     assert any("context/missing.md" in e for e in r.errors)
+
+
+from armature_cabinet.cli import main
+
+
+def test_build_missing_folder_returns_1_no_traceback(capsys):
+    rc = main(["build", "/tmp/does-not-exist-xyz-abc"])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "error:" in err
+    assert "Traceback" not in err
+
+
+def test_build_bogus_skill_returns_1(capsys):
+    rc = main(["build", str(FIX), "-o", "/tmp/out-bogus", "--skill", "nope"])
+    assert rc == 1
+    assert "nope" in capsys.readouterr().err
+
+
+def test_validate_clean_returns_0(capsys):
+    rc = main(["validate", str(FIX)])
+    assert rc == 0
+    assert "ok" in capsys.readouterr().out.lower()
+
+
+def test_validate_dup_id_returns_1(tmp_path, capsys):
+    _write(tmp_path, {
+        "cabinet.yaml": "id: a\nname: A\nkind: partner\nschema_version: '0.1.0'\n",
+        "soul.md": "---\nrole: R\n---\nbody\n",
+        "skills/x.md": "---\nid: dup\n---\nb\n",
+        "skills/y.md": "---\nid: dup\n---\nb\n",
+    })
+    rc = main(["validate", str(tmp_path)])
+    assert rc == 1
+    assert "duplicate" in capsys.readouterr().err

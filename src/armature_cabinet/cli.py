@@ -1,4 +1,4 @@
-"""`armature-cabinet build <folder>` — compile a cabinet agent into an Armature bundle."""
+"""`armature-cabinet build|validate <folder>` — compile / check a cabinet agent."""
 from __future__ import annotations
 import argparse
 import sys
@@ -6,8 +6,10 @@ from pathlib import Path
 
 import yaml
 
+from .errors import CabinetError
 from .loader import load_package
 from .compiler import compile_agent, compile_safety_fragment
+from .validate import validate_package
 
 
 def _dump(data, path: Path) -> None:
@@ -16,9 +18,21 @@ def _dump(data, path: Path) -> None:
         yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False, width=100)
 
 
+def _report(r) -> None:
+    for w in r.warnings:
+        print(f"warning: {w}", file=sys.stderr)
+    for e in r.errors:
+        print(f"error: {e}", file=sys.stderr)
+
+
 def cmd_build(args: argparse.Namespace) -> int:
     pkg = load_package(args.folder)
     include = args.skill or None
+
+    r = validate_package(pkg, include)
+    _report(r)
+    if not r.ok:
+        return 1
 
     bundle = compile_agent(pkg, include=include)
     out_dir = Path(args.out) if args.out else Path("dist") / pkg.id
@@ -40,6 +54,19 @@ def cmd_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_validate(args: argparse.Namespace) -> int:
+    pkg = load_package(args.folder)
+    include = args.skill or None
+    r = validate_package(pkg, include)
+    # exercise the compiler in-memory to surface composition problems too
+    compile_agent(pkg, include=include)
+    _report(r)
+    if r.ok:
+        print(f"ok: {pkg.id} ({pkg.kind})")
+        return 0
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="armature-cabinet")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -52,8 +79,19 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--no-safety", action="store_true", help="skip the advisory safety fragment")
     b.set_defaults(func=cmd_build)
 
+    v = sub.add_parser("validate",
+                       help="load + validate + compile in memory; writes no files")
+    v.add_argument("folder", help="path to the cabinet agent folder")
+    v.add_argument("--skill", action="append",
+                   help="check only this skill id (repeatable); default checks all")
+    v.set_defaults(func=cmd_validate)
+
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except CabinetError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
