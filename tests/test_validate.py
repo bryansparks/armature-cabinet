@@ -205,3 +205,13 @@ def test_validate_when_previews_matched_skills(capsys):
     out = capsys.readouterr().out
     assert "matched 2 skill(s)" in out
     assert "appsec.triage-dependabot-alerts" in out
+
+
+def test_build_when_empty_string_is_a_no_match_not_all_skills(tmp_path, capsys):
+    # --when "" is a real (empty) task, NOT "no --when": must no-match, not attach all skills.
+    out = tmp_path / "out"
+    rc = main(["build", str(FIX), "--when", "", "-o", str(out)])
+    assert rc == 0
+    assert "no skills matched" in capsys.readouterr().err.lower()
+    bundle = yaml.safe_load((out / "agent.yaml").read_text())
+    assert bundle["role"]["skills"] == []
