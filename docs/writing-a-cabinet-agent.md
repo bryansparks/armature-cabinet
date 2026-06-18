@@ -83,9 +83,14 @@ What each file is for:
   their `context:` list. Resolved into the skill's `x_context`. Unreferenced
   context files are loaded but not emitted.
 
-`soul.md` and `mandate.md` are the thin required core (named in
-`cabinet.yaml`'s `blocks:`). `brakes.md`, `trust.yaml`, `skills/`, and
-`context/` are the thick optional extras (named in `blocks_extra:`).
+`soul.md` and `mandate.md` are the thin core. `brakes.md`, `trust.yaml`,
+`skills/`, and `context/` are the thick optional extras. The loader
+resolves all of these by **canonical filename** — it reads `soul.md`,
+`mandate.md`, `brakes.md`, `trust.yaml`, `skills/`, and `context/` via
+hardcoded paths, regardless of what `cabinet.yaml` declares. The
+`blocks:` and `blocks_extra:` fields in `cabinet.yaml` are declarative
+metadata, **not currently consumed by the loader** (like the dropped
+richness fields below).
 
 ---
 
@@ -105,12 +110,12 @@ The manifest. Thin required core plus thick optional metadata.
 | `name` | string | optional (defaults to `id`) | any string | `role.name` |
 | `kind` | string | optional (defaults to `partner`) | `partner` \| `clone` | `role.type` (mapped; default `worker`) + `x_kind` |
 | `schema_version` | string | optional | any version string | `x_schema_version` (omitted when null) |
-| `blocks.soul` | path | required | path to a `.md` file | parsed as `soul.md` |
-| `blocks.mandate` | path | required | path to a `.md` file | parsed as `mandate.md` |
-| `blocks_extra.brakes` | path | optional | path to a `.md` file | parsed as `brakes.md` |
-| `blocks_extra.trust` | path | optional | path to a `.yaml` file | parsed as `trust.yaml` |
-| `blocks_extra.skills` | path | optional | path to a directory | each `*.md` parsed as a skill |
-| `blocks_extra.context` | path | optional | path to a directory | referenced by skills → `x_context` |
+| `blocks.soul` | path | expected (not enforced) | path to a `.md` file | declarative; loader uses the canonical filename `soul.md` regardless (a missing file yields an empty block, no error) |
+| `blocks.mandate` | path | expected (not enforced) | path to a `.md` file | declarative; loader uses the canonical filename `mandate.md` regardless (a missing file yields an empty block, no error) |
+| `blocks_extra.brakes` | path | optional | path to a `.md` file | declarative; loader uses the canonical filename `brakes.md` regardless |
+| `blocks_extra.trust` | path | optional | path to a `.yaml` file | declarative; loader uses the canonical filename `trust.yaml` regardless |
+| `blocks_extra.skills` | path | optional | path to a directory | declarative; loader uses the canonical `skills/` directory regardless |
+| `blocks_extra.context` | path | optional | path to a directory | declarative; loader uses the canonical `context/` directory regardless |
 | `summary` | string | optional | any string | authored but currently dropped (future "richness") |
 | `maturity` | string | optional | any string | authored but currently dropped |
 | `owner` | string | optional | any string | authored but currently dropped |
@@ -163,7 +168,7 @@ Response discipline. Plain YAML (no body).
 
 | field | type | required? | allowed values | compiles to |
 |---|---|---|---|---|
-| `show_work` | string | optional | `required` \| others | `role.description` prose: "When you respond, always:\n- …" |
+| `show_work` | string | optional | `required` \| `on_request` \| (others: no prose) | `role.description` prose: "When you respond, always:\n- …" |
 | `cite_sources` | string | optional | `required` \| others | `role.description` prose (same block) |
 | `uncertainty` | string | optional | `must_flag` \| others | `role.description` prose (same block) |
 | `escalate_when` | list[string] | optional | any conditions | `suggested_escalation_gates` in `<id>.safety.yaml` |
@@ -542,17 +547,17 @@ Validate a folder (fast feedback, writes nothing):
 
 ```bash
 armature-cabinet validate tests/fixtures/incident-comms
-# ok: incident-comms (partner)
+ok: incident-comms (partner)
 ```
 
 Build a bundle into `dist/`:
 
 ```bash
 armature-cabinet build tests/fixtures/incident-comms -o dist/incident-comms
-# compiled 'incident-comms' (partner)
-#   bundle  -> dist/incident-comms/agent.yaml
-#   role    -> 2 skill(s), 2 tool(s)
-#   safety  -> dist/incident-comms/incident-comms.safety.yaml  (advisory; merge into your workflow)
+compiled 'incident-comms' (partner)
+  bundle  -> dist/incident-comms/agent.yaml
+  role    -> 2 skill(s), 2 tool(s)
+  safety  -> dist/incident-comms/incident-comms.safety.yaml  (advisory; merge into your workflow)
 ```
 
 Attach only one skill from a package:
@@ -565,16 +570,16 @@ Preview woodshop selection for a task (writes nothing):
 
 ```bash
 armature-cabinet validate tests/fixtures/security-triage --when "prioritize open Dependabot alerts"
-# matched 2 skill(s): appsec.triage-dependabot-alerts, appsec.triage-secret-scanning
-# ok: security-triage (partner)
+matched 2 skill(s): appsec.triage-dependabot-alerts, appsec.triage-secret-scanning
+ok: security-triage (partner)
 ```
 
 No-match is a warning, not an error — the command still exits 0:
 
 ```bash
 armature-cabinet validate tests/fixtures/incident-comms --when "prioritize open Dependabot alerts"
-# warning: no skills matched task: "prioritize open Dependabot alerts"
-# ok: incident-comms (partner)
+warning: no skills matched task: "prioritize open Dependabot alerts"
+ok: incident-comms (partner)
 ```
 
 ---
