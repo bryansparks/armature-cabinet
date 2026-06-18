@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install ruff
+      - run: ruff check src tests
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install build
+      - run: python -m build
+      - name: Verify wheel + sdist and import the wheel
+        run: |
+          set -e
+          ls -1 dist/*.whl dist/*.tar.gz
+          python -m venv /tmp/wt
+          /tmp/wt/bin/pip install --no-deps dist/*.whl
+          /tmp/wt/bin/pip install pyyaml
+          /tmp/wt/bin/python -c "import armature_cabinet; print('wheel import ok', armature_cabinet.__version__)"
