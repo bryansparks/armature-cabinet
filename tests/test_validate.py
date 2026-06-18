@@ -215,3 +215,10 @@ def test_build_when_empty_string_is_a_no_match_not_all_skills(tmp_path, capsys):
     assert "no skills matched" in capsys.readouterr().err.lower()
     bundle = yaml.safe_load((out / "agent.yaml").read_text())
     assert bundle["role"]["skills"] == []
+
+
+def test_validate_when_no_match_warns_and_exits_zero(capsys):
+    # a no-match is not a validation error: warn + exit 0 (validate subcommand)
+    rc = main(["validate", str(FIX), "--when", "quantum entanglement"])
+    assert rc == 0
+    assert "no skills matched" in capsys.readouterr().err.lower()
