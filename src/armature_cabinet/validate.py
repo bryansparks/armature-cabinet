@@ -7,8 +7,6 @@ the CLI can print them all at once.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any
-
 from .model import AgentPackage
 
 _VALID_KINDS = {"partner", "clone"}
