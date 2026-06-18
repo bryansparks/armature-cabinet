@@ -1,9 +1,12 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
+from armature_cabinet.cli import main
 from armature_cabinet.errors import CabinetError
 from armature_cabinet.loader import load_package
+from armature_cabinet.validate import validate_package
 
 FIX = Path(__file__).parent / "fixtures" / "security-triage"
 
@@ -40,9 +43,6 @@ def test_context_keyed_by_path_relative_to_root():
     assert "context/severity-rubric.md" in pkg.context
     assert "context/finding-schema.md" in pkg.context
     assert pkg.context["context/severity-rubric.md"].strip()  # non-empty body
-
-
-from armature_cabinet.validate import validate_package
 
 
 def _valid_files():
@@ -124,9 +124,6 @@ def test_dangling_context_ref_is_error(tmp_path):
     assert any("context/missing.md" in e for e in r.errors)
 
 
-from armature_cabinet.cli import main
-
-
 def test_build_missing_folder_returns_1_no_traceback(capsys):
     rc = main(["build", "/tmp/does-not-exist-xyz-abc"])
     assert rc == 1
@@ -167,9 +164,6 @@ def test_non_str_id_is_error(tmp_path):
     })
     r = validate_package(load_package(tmp_path))
     assert any("non-empty string" in e for e in r.errors)
-
-
-import yaml
 
 
 def test_build_with_when_selects_matching_skills(tmp_path):
