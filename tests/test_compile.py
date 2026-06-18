@@ -61,3 +61,17 @@ def test_x_schema_version_omitted_when_absent(tmp_path):
     (tmp_path / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
     b = compile_agent(load_package(tmp_path))
     assert "x_schema_version" not in b["role"]
+
+
+def test_skill_context_resolved_to_x_context():
+    b = compile_agent(load_package(FIX))
+    entry = b["skill_library"]["appsec.rank-findings"]
+    assert "x_context" in entry
+    assert "context/severity-rubric.md" in entry["x_context"]
+    assert entry["x_context"]["context/severity-rubric.md"].strip()  # body present
+
+
+def test_skill_extra_passed_through_as_x():
+    b = compile_agent(load_package(FIX))
+    # rank-findings.md frontmatter has `outputs: Finding[]`
+    assert b["skill_library"]["appsec.rank-findings"]["x_outputs"] == "Finding[]"

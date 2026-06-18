@@ -90,7 +90,7 @@ def compose_description(pkg: AgentPackage) -> str:
     return "\n\n".join(p for p in parts if p).strip()
 
 
-def _skill_entry(s: Skill) -> dict[str, Any]:
+def _skill_entry(s: Skill, pkg: AgentPackage) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "id": s.id,
         "description": s.name or (s.when or s.id),
@@ -105,6 +105,13 @@ def _skill_entry(s: Skill) -> dict[str, Any]:
         entry["x_cost_tier"] = s.cost_tier
     if s.version:
         entry["x_version"] = s.version
+    # resolved context refs -> their bodies (SkillDef allows extra)
+    resolved = {ref: pkg.context[ref] for ref in s.context if ref in pkg.context}
+    if resolved:
+        entry["x_context"] = resolved
+    # pass through any other skill frontmatter via extra="allow"
+    for key, val in s.extra.items():
+        entry[f"x_{key}"] = val
     return entry
 
 
@@ -131,7 +138,7 @@ def compile_agent(pkg: AgentPackage, *, include: list[str] | None = None) -> dic
     schema_version = pkg.manifest.get("schema_version")
     if schema_version is not None:
         role["x_schema_version"] = schema_version
-    skill_library = {s.id: _skill_entry(s) for s in skills}
+    skill_library = {s.id: _skill_entry(s, pkg) for s in skills}
     return {"role": role, "skill_library": skill_library}
 
 
