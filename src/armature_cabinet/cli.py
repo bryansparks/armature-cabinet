@@ -10,6 +10,7 @@ from .errors import CabinetError
 from .loader import load_package
 from .compiler import compile_agent, compile_safety_fragment
 from .validate import validate_package
+from .select import select_skills
 
 
 def _dump(data, path: Path) -> None:
@@ -26,8 +27,18 @@ def _report(r) -> None:
 
 
 def cmd_build(args: argparse.Namespace) -> int:
+    if args.when is not None and args.skill:
+        print("error: --when and --skill are mutually exclusive (pick one selection mode)",
+              file=sys.stderr)
+        return 1
     pkg = load_package(args.folder)
-    include = args.skill or None
+    if args.when is not None:
+        include = select_skills(pkg, args.when)
+        if not include:
+            print(f'warning: no skills matched task: "{args.when}"; building with 0 skills',
+                  file=sys.stderr)
+    else:
+        include = args.skill or None
 
     r = validate_package(pkg, include)
     _report(r)
@@ -55,10 +66,21 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
+    if args.when is not None and args.skill:
+        print("error: --when and --skill are mutually exclusive (pick one selection mode)",
+              file=sys.stderr)
+        return 1
     pkg = load_package(args.folder)
-    include = args.skill or None
+    if args.when is not None:
+        include = select_skills(pkg, args.when)
+        if include:
+            print(f"matched {len(include)} skill(s): {', '.join(include)}")
+        else:
+            print(f'warning: no skills matched task: "{args.when}"', file=sys.stderr)
+    else:
+        include = args.skill or None
+
     r = validate_package(pkg, include)
-    # exercise the compiler in-memory to surface composition problems too
     compile_agent(pkg, include=include)
     _report(r)
     if r.ok:
@@ -76,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("-o", "--out", help="output directory (default: dist/<id>/)")
     b.add_argument("--skill", action="append",
                    help="attach only this skill id (repeatable); default attaches all")
+    b.add_argument("--when", help="attach skills whose 'when' overlaps this task string")
     b.add_argument("--no-safety", action="store_true", help="skip the advisory safety fragment")
     b.set_defaults(func=cmd_build)
 
@@ -84,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     v.add_argument("folder", help="path to the cabinet agent folder")
     v.add_argument("--skill", action="append",
                    help="check only this skill id (repeatable); default checks all")
+    v.add_argument("--when", help="preview skills whose 'when' overlaps this task string")
     v.set_defaults(func=cmd_validate)
 
     args = parser.parse_args(argv)

@@ -167,3 +167,41 @@ def test_non_str_id_is_error(tmp_path):
     })
     r = validate_package(load_package(tmp_path))
     assert any("non-empty string" in e for e in r.errors)
+
+
+import yaml
+
+
+def test_build_with_when_selects_matching_skills(tmp_path):
+    out = tmp_path / "out"
+    rc = main(["build", str(FIX), "--when",
+               "prioritize open Dependabot alerts", "-o", str(out)])
+    assert rc == 0
+    bundle = yaml.safe_load((out / "agent.yaml").read_text())
+    assert bundle["role"]["skills"] == [
+        "appsec.triage-dependabot-alerts", "appsec.triage-secret-scanning"]
+
+
+def test_build_when_and_skill_mutually_exclusive(capsys):
+    rc = main(["build", str(FIX), "--when", "alerts", "--skill", "appsec.rank-findings"])
+    assert rc == 1
+    assert "mutually exclusive" in capsys.readouterr().err.lower()
+
+
+def test_build_when_no_match_warns_and_builds_zero_skills(tmp_path, capsys):
+    out = tmp_path / "out"
+    rc = main(["build", str(FIX), "--when", "quantum entanglement", "-o", str(out)])
+    assert rc == 0
+    assert "no skills matched" in capsys.readouterr().err.lower()
+    bundle = yaml.safe_load((out / "agent.yaml").read_text())
+    assert bundle["role"]["skills"] == []
+    assert bundle["skill_library"] == {}
+
+
+def test_validate_when_previews_matched_skills(capsys):
+    rc = main(["validate", str(FIX), "--when",
+               "prioritize open Dependabot alerts"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "matched 2 skill(s)" in out
+    assert "appsec.triage-dependabot-alerts" in out
