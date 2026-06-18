@@ -45,3 +45,19 @@ def test_safety_fragment_is_advisory_hard_enforcement():
     assert "merge_pr" in blocked and "write_to_repo" in blocked
     assert f["contracts"]["max_iterations"] == 10
     assert "_note" in f  # carries the "merge this in by hand" advisory
+
+
+def test_description_carries_identity_and_mandate_content():
+    desc = compile_agent(load_package(FIX))["role"]["description"]
+    assert "Expertise:" in desc
+    assert "Temperament:" in desc
+    assert "Success looks like:" in desc
+
+
+def test_x_schema_version_omitted_when_absent(tmp_path):
+    (tmp_path / "cabinet.yaml").write_text(
+        "id: a\nname: A\nkind: partner\n", encoding="utf-8"
+    )
+    (tmp_path / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
+    b = compile_agent(load_package(tmp_path))
+    assert "x_schema_version" not in b["role"]

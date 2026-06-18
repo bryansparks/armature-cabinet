@@ -39,6 +39,14 @@ def compose_description(pkg: AgentPackage) -> str:
     if pkg.soul_body:
         parts.append(pkg.soul_body)
 
+    expertise = pkg.soul_meta.get("expertise")
+    if expertise:
+        parts.append("Expertise:\n" + _bullets(expertise))
+
+    temperament = pkg.soul_meta.get("temperament")
+    if temperament:
+        parts.append(f"Temperament: {temperament}")
+
     standards = pkg.soul_meta.get("standards")
     if standards:
         parts.append("Standards you hold to:\n" + _bullets(standards))
@@ -57,10 +65,13 @@ def compose_description(pkg: AgentPackage) -> str:
 
     goal = pkg.mandate_meta.get("goal")
     oos = pkg.mandate_meta.get("out_of_scope")
-    if goal or oos:
+    success = pkg.mandate_meta.get("success_looks_like")
+    if goal or oos or success:
         mandate = []
         if goal:
             mandate.append(f"Your mandate: {goal}")
+        if success:
+            mandate.append("Success looks like:\n" + _bullets(success))
         if oos:
             mandate.append("Out of scope: " + ", ".join(oos))
         parts.append("\n".join(mandate))
@@ -116,8 +127,10 @@ def compile_agent(pkg: AgentPackage, *, include: list[str] | None = None) -> dic
         # metadata along for the ride (Role has extra="allow")
         "x_kind": pkg.kind,
         "x_source": pkg.id,
-        "x_schema_version": pkg.manifest.get("schema_version"),
     }
+    schema_version = pkg.manifest.get("schema_version")
+    if schema_version is not None:
+        role["x_schema_version"] = schema_version
     skill_library = {s.id: _skill_entry(s) for s in skills}
     return {"role": role, "skill_library": skill_library}
 
