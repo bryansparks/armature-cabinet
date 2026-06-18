@@ -157,3 +157,13 @@ def test_validate_dup_id_returns_1(tmp_path, capsys):
     rc = main(["validate", str(tmp_path)])
     assert rc == 1
     assert "duplicate" in capsys.readouterr().err
+
+
+def test_non_str_id_is_error(tmp_path):
+    _write(tmp_path, {
+        "cabinet.yaml": "id:\n  - 1\n  - 2\nname: A\nkind: partner\nschema_version: '0.1.0'\n",
+        "soul.md": "---\nrole: R\n---\nbody\n",
+        "skills/s.md": "---\nid: s\n---\nbody\n",
+    })
+    r = validate_package(load_package(tmp_path))
+    assert any("non-empty string" in e for e in r.errors)

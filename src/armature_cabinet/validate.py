@@ -26,8 +26,11 @@ def validate_package(pkg: AgentPackage, include: list[str] | None = None) -> Val
     r = ValidationResult()
     man = pkg.manifest
 
-    if not man.get("id"):
+    id_val = man.get("id")
+    if id_val is None:
         r.errors.append("cabinet.yaml: missing required 'id'")
+    elif not isinstance(id_val, str) or not id_val:
+        r.errors.append("cabinet.yaml: 'id' must be a non-empty string")
     if not man.get("name"):
         r.warnings.append("cabinet.yaml: missing 'name' (defaulting to id)")
     kind = man.get("kind")
