@@ -1,0 +1,42 @@
+_note: "ADVISORY. A CompiledAgent bundle carries role + skills only. These rules enforce this agent's\
+  \ brakes/trust as HARD constraints \u2014 merge them into your workflow's `safety:`/`contracts:` and\
+  \ add the gates."
+safety:
+- tool: merge_pr
+  condition:
+    field: _
+    op: truthy
+  action: block
+  message: Security Triage Partner is forbidden from 'merge_pr'.
+- tool: close_alert
+  condition:
+    field: _
+    op: truthy
+  action: block
+  message: Security Triage Partner is forbidden from 'close_alert'.
+- tool: dismiss_alert
+  condition:
+    field: _
+    op: truthy
+  action: block
+  message: Security Triage Partner is forbidden from 'dismiss_alert'.
+- tool: modify_secret
+  condition:
+    field: _
+    op: truthy
+  action: block
+  message: Security Triage Partner is forbidden from 'modify_secret'.
+- tool: write_to_repo
+  condition:
+    field: _
+    op: truthy
+  action: block
+  message: Security Triage Partner is forbidden from 'write_to_repo'.
+contracts:
+  max_iterations: 10
+  _cost_ceiling_usd: 1.5
+suggested_escalation_gates:
+- confidence < 0.6
+- severity == critical AND reachable == true
+- a secret-scanning hit looks live (not a test/placeholder)
+- input contradicts an assumption declared in the run

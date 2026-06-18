@@ -1,0 +1,14 @@
+name: security-triage-demo
+version: "1.0"
+model_tiers:
+  small: { provider: anthropic, model: claude-haiku-4-5-20251001 }
+role_type_defaults:
+  worker: small
+agent_library:
+  security-triage:
+    path: security-triage/agent.yaml
+stages:
+  - id: triage
+    agent: security-triage
+    output_mode: text
+    depends_on: []

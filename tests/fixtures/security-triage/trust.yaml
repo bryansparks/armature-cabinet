@@ -1,0 +1,9 @@
+show_work: required          # every ranking comes with its reasoning
+cite_sources: required       # each finding links to its alert + advisory
+uncertainty: must_flag       # state confidence and what would change it
+
+escalate_when:
+  - confidence < 0.6
+  - severity == critical AND reachable == true
+  - a secret-scanning hit looks live (not a test/placeholder)
+  - input contradicts an assumption declared in the run

@@ -1,0 +1,35 @@
+schema_version: "0.1.0"
+
+# --- thin core (required) ---
+id: security-triage
+name: Security Triage Partner
+kind: partner
+summary: Ranks GitHub-native security signals and surfaces only what needs a human.
+blocks:
+  soul: soul.md
+  mandate: mandate.md
+
+# --- thick / optional ---
+maturity: L1
+owner: bryan
+tags: [security, github, triage, appsec]
+
+blocks_extra:
+  brakes: brakes.md
+  trust: trust.yaml
+  skills: skills/
+  context: context/
+
+# How declared tools resolve to real capabilities.
+# We piggy-back on GitHub — no new tool for anyone to adopt. The org's existing
+# GitHub App / token is the adapter. Skills name github:* operations.
+tool_resolution: github
+
+runtime_hints:
+  default_cost_tier: T2          # T1 trust-critical | T2 routine | T3 exploratory
+
+# --- marketplace seam (NOT active yet — we stay file-based for now) ---
+# Skills are vendored as files. Each carries an id + version so the same skill is
+# recognizable across agents (the future dedup key). Later, a skill entry can be:
+#     from: "shelf://appsec/rank-findings@^1.0"
+# and the runtime resolves it from a shared shelf instead of a local copy.

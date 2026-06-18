@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "armature-cabinet"
+version = "0.1.0"
+description = "Compile cabinet agent folders into Armature agent bundles."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "armature-agents>=0.3.5",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+armature-cabinet = "armature_cabinet.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/armature_cabinet"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with -m 'not slow')",
+]

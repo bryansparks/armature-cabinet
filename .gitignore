@@ -1,0 +1,12 @@
+# build artifacts
+dist/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+
+# original archives + orphan loose copies at repo root
+# (the user's originals from the zip download; kept on disk, NOT tracked)
+/armature-cabinet.zip
+/files (5).zip
+/compiler.py
+/agent.yaml
