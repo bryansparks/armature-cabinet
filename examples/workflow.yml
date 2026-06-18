@@ -1,4 +1,4 @@
-name: security-triage-demo
+name: triage-and-comms-demo
 version: "1.0"
 model_tiers:
   small: { provider: anthropic, model: claude-haiku-4-5-20251001 }
@@ -7,8 +7,14 @@ role_type_defaults:
 agent_library:
   security-triage:
     path: security-triage/agent.yaml
+  incident-comms:
+    path: incident-comms/agent.yaml
 stages:
   - id: triage
     agent: security-triage
     output_mode: text
     depends_on: []
+  - id: comms
+    agent: incident-comms
+    output_mode: text
+    depends_on: [triage]

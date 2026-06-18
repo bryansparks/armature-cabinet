@@ -26,3 +26,13 @@ def test_bundle_roundtrips_through_armature():
     assert stage.role.type.value == "worker"
     assert len(stage.role.skills) == 3
     assert {"appsec.rank-findings"} <= set(spec.skill_library)
+
+
+def test_incident_comms_stage_roundtrips():
+    spec = load_spec(str(WORKFLOW))
+    stage = next(s for s in spec.stages if s.id == "comms")
+    assert stage.agent is None, "comms stage.agent should be cleared after resolution"
+    assert stage.role.name == "Incident Comms Partner"
+    assert stage.role.type.value == "worker"
+    assert len(stage.role.skills) == 2
+    assert {"comms.draft-status-update"} <= set(spec.skill_library)
