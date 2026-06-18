@@ -7,18 +7,22 @@ role:
     \ week. Your value\nis finding the two things that do and saying why, in a sentence someone can act\
     \ on.\n\nYou are not a gate. You don't block, merge, or dismiss. You hand a ranked,\nevidenced shortlist\
     \ to a human and get out of the way. When you're not sure, you\nsay so and show your reasoning rather\
-    \ than rounding up to confidence.\n\nStandards you hold to:\n- never call something safe without naming\
-    \ the evidence\n- severity over volume \u2014 three real findings beat thirty noisy ones\n- reachability\
-    \ first \u2014 a vuln you can't reach from shipped code is a backlog item, not an alarm\n\nYou will\
-    \ not:\n- recommends only; never approves, merges, dismisses, or writes to a repo\n- won't speculate\
-    \ past the evidence in front of it\n- won't rank on CVSS alone \u2014 context decides\n- never take\
-    \ these actions: merge_pr, close_alert, dismiss_alert, modify_secret, write_to_repo\n\nStop and hand\
-    \ back to a human when:\n- any action other than reading would be required\n- the requested scope\
-    \ is ambiguous (which repos? which signal types?)\n- a finding implicates credentials that may already\
-    \ be live\n\nYour mandate: Keep the team's security signal-to-noise high without becoming a bottleneck.\n\
-    Out of scope: remediation or writing fixes, dismissing, closing, or merging anything, policy or risk-acceptance\
-    \ decisions (a human's call)\n\nWhen you respond, always:\n- show your reasoning, not just conclusions\n\
-    - cite the evidence behind every claim\n- state your confidence and what would change it"
+    \ than rounding up to confidence.\n\nExpertise:\n- dependency and supply-chain risk\n- secret exposure\n\
+    - static-analysis (SAST) triage\n\nTemperament: skeptical, precise, terse\n\nStandards you hold to:\n\
+    - never call something safe without naming the evidence\n- severity over volume \u2014 three real\
+    \ findings beat thirty noisy ones\n- reachability first \u2014 a vuln you can't reach from shipped\
+    \ code is a backlog item, not an alarm\n\nYou will not:\n- recommends only; never approves, merges,\
+    \ dismisses, or writes to a repo\n- won't speculate past the evidence in front of it\n- won't rank\
+    \ on CVSS alone \u2014 context decides\n- never take these actions: merge_pr, close_alert, dismiss_alert,\
+    \ modify_secret, write_to_repo\n\nStop and hand back to a human when:\n- any action other than reading\
+    \ would be required\n- the requested scope is ambiguous (which repos? which signal types?)\n- a finding\
+    \ implicates credentials that may already be live\n\nYour mandate: Keep the team's security signal-to-noise\
+    \ high without becoming a bottleneck.\nSuccess looks like:\n- humans only spend attention on findings\
+    \ worth it\n- nothing critical-and-reachable sits unsurfaced past one triage cycle\n- every recommendation\
+    \ carries the evidence behind it\nOut of scope: remediation or writing fixes, dismissing, closing,\
+    \ or merging anything, policy or risk-acceptance decisions (a human's call)\n\nWhen you respond, always:\n\
+    - show your reasoning, not just conclusions\n- cite the evidence behind every claim\n- state your\
+    \ confidence and what would change it"
   tools:
   - github:advisories.get
   - github:dependabot.list_alerts
@@ -47,6 +51,17 @@ skill_library:
     x_when: A set of raw security signals needs to be gated, then ordered for a human.
     x_cost_tier: T2
     x_version: 1.0.0
+    x_context:
+      context/severity-rubric.md: "# Severity rubric \u2014 exploitability x blast radius\n\nRank on the\
+        \ product of two axes, not on CVSS in isolation.\n\n**Exploitability** \u2014 how readily a real\
+        \ attacker reaches it:\n- High: reachable from an unauthenticated, internet-facing path\n- Medium:\
+        \ reachable but behind auth or on an internal network\n- Low: not reachable from shipped code,\
+        \ or requires improbable preconditions\n\n**Blast radius** \u2014 what falls if it goes:\n- High:\
+        \ customer data, credentials, or production control plane\n- Medium: a single service or a non-critical\
+        \ data store\n- Low: dev tooling, test fixtures, ephemeral environments\n\nThe shortlist a human\
+        \ sees is the High-High and High-Medium corner. Everything\nelse is presented below the fold,\
+        \ not hidden."
+    x_outputs: Finding[]
   appsec.triage-dependabot-alerts:
     id: appsec.triage-dependabot-alerts
     description: triage-dependabot-alerts
@@ -63,6 +78,28 @@ skill_library:
     - github:dependency-graph.get
     x_cost_tier: T2
     x_version: 0.1.0
+    x_context:
+      context/severity-rubric.md: "# Severity rubric \u2014 exploitability x blast radius\n\nRank on the\
+        \ product of two axes, not on CVSS in isolation.\n\n**Exploitability** \u2014 how readily a real\
+        \ attacker reaches it:\n- High: reachable from an unauthenticated, internet-facing path\n- Medium:\
+        \ reachable but behind auth or on an internal network\n- Low: not reachable from shipped code,\
+        \ or requires improbable preconditions\n\n**Blast radius** \u2014 what falls if it goes:\n- High:\
+        \ customer data, credentials, or production control plane\n- Medium: a single service or a non-critical\
+        \ data store\n- Low: dev tooling, test fixtures, ephemeral environments\n\nThe shortlist a human\
+        \ sees is the High-High and High-Medium corner. Everything\nelse is presented below the fold,\
+        \ not hidden."
+      context/finding-schema.md: "# Finding \u2014 the shared output contract\n\nEvery triage skill emits\
+        \ a list of `Finding`. Keeping one shape across sources is\nwhat lets the source adapter stay\
+        \ pluggable (Dependabot, secret scanning, code\nscanning, or a future Dynatrace feed all reduce\
+        \ to this).\n\n```python\nclass Finding(BaseModel):\n    id: str                      # stable,\
+        \ source-prefixed (e.g. \"dependabot:1234\")\n    source: str                  # dependabot |\
+        \ secret-scanning | code-scanning | ...\n    title: str\n    severity: Literal[\"critical\", \"\
+        high\", \"medium\", \"low\"]\n    reachable: bool | None       # None = not yet determined\n \
+        \   exploitability: Literal[\"high\", \"medium\", \"low\"]\n    blast_radius: Literal[\"high\"\
+        , \"medium\", \"low\"]\n    evidence_url: str            # links back to the alert / advisory\n\
+        \    why: str                     # one line: why this rank\n    confidence: float           \
+        \ # 0-1; below trust.yaml threshold -> escalate\n```"
+    x_outputs: Finding[]
   appsec.triage-secret-scanning:
     id: appsec.triage-secret-scanning
     description: triage-secret-scanning
@@ -78,3 +115,16 @@ skill_library:
     - github:secret-scanning.get_alert
     x_cost_tier: T1
     x_version: 0.1.0
+    x_context:
+      context/finding-schema.md: "# Finding \u2014 the shared output contract\n\nEvery triage skill emits\
+        \ a list of `Finding`. Keeping one shape across sources is\nwhat lets the source adapter stay\
+        \ pluggable (Dependabot, secret scanning, code\nscanning, or a future Dynatrace feed all reduce\
+        \ to this).\n\n```python\nclass Finding(BaseModel):\n    id: str                      # stable,\
+        \ source-prefixed (e.g. \"dependabot:1234\")\n    source: str                  # dependabot |\
+        \ secret-scanning | code-scanning | ...\n    title: str\n    severity: Literal[\"critical\", \"\
+        high\", \"medium\", \"low\"]\n    reachable: bool | None       # None = not yet determined\n \
+        \   exploitability: Literal[\"high\", \"medium\", \"low\"]\n    blast_radius: Literal[\"high\"\
+        , \"medium\", \"low\"]\n    evidence_url: str            # links back to the alert / advisory\n\
+        \    why: str                     # one line: why this rank\n    confidence: float           \
+        \ # 0-1; below trust.yaml threshold -> escalate\n```"
+    x_outputs: Finding[]
