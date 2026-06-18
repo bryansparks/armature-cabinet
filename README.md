@@ -73,6 +73,7 @@ Produces:
 | `cabinet.yaml` `id` | `x_source` on role (also names the output dir) |
 | `cabinet.yaml` `name` | `role.name` |
 | `cabinet.yaml` `kind` (`partner`\|`clone`) | `role.type` (mapped; default `worker`) + `x_kind` |
+| `soul.md` `armature_role_type` (optional) | overrides `role.type` (else mapped from `kind`, default `worker`) |
 | `cabinet.yaml` `schema_version` | `x_schema_version` (omitted when null) |
 | `soul.md` `role` / body | `role.description` prose |
 | `soul.md` `expertise` (list) | `role.description` prose: "Expertise:\n- …" |
@@ -82,8 +83,8 @@ Produces:
 | `mandate.md` `success_looks_like` (list) | `role.description` prose: "Success looks like:\n- …" |
 | `mandate.md` `out_of_scope` (list) | `role.description` prose: "Out of scope: …" |
 | `brakes.md` `forbidden_actions` (list) | `role.description` prose **and** `block` rules in `<id>.safety.yaml` |
-| `brakes.md` `halt_and_ask_when` / body | `role.description` prose |
-| `brakes.md` `max_iterations` / `cost_ceiling_usd` | `contracts.*` in `<id>.safety.yaml` |
+| `brakes.md` `halt_and_ask_when` | `role.description` prose (e.g. "Stop and hand back to a human when: …") |
+| `brakes.md` `max_iterations` / `cost_ceiling_usd` | `contracts.*` in `<id>.safety.yaml`[^cc] |
 | `trust.yaml` `show_work`/`cite_sources`/`uncertainty` | `role.description` prose: "When you respond, always:\n- …" |
 | `trust.yaml` `escalate_when` (list) | `suggested_escalation_gates` in `<id>.safety.yaml` |
 | skill body | `skill_library[id].content` |
@@ -98,6 +99,9 @@ Produces:
 `cabinet.yaml` richness metadata (`summary`, `maturity`, `owner`, `tags`,
 `tool_resolution`, `runtime_hints`) is authored but currently dropped — kept for
 human readers and future richness.
+
+[^cc]: `cost_ceiling_usd` → `contracts._cost_ceiling_usd` (advisory; no USD
+contract field in Armature core yet, hence the leading underscore).
 
 ## The one thing to know about guardrails
 
