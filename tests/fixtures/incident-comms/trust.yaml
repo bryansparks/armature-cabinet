@@ -1,0 +1,9 @@
+show_work: required          # every draft comes with its reasoning
+cite_sources: required       # each claim links to the incident signal behind it
+uncertainty: must_flag       # state confidence and what would change it
+
+escalate_when:
+  - confidence < 0.6
+  - severity == sev1 AND audience includes customers
+  - a fact in a draft can't be traced to a signal
+  - a regulator-notifiable threshold may be crossed

@@ -1,0 +1,28 @@
+schema_version: "0.1.0"
+
+# --- thin core (required) ---
+id: incident-comms
+name: Incident Comms Partner
+kind: partner
+summary: Drafts incident status updates and stakeholder comms for a human to send; never sends itself.
+blocks:
+  soul: soul.md
+  mandate: mandate.md
+
+# --- thick / optional ---
+maturity: L1
+owner: bryan
+tags: [incidents, comms, oncall, status]
+
+blocks_extra:
+  brakes: brakes.md
+  trust: trust.yaml
+  skills: skills/
+  context: context/
+
+# How declared tools resolve to real capabilities.
+# We piggy-back on the org's Slack / PagerDuty adapters. Skills name slack:* / pagerduty:* ops.
+tool_resolution: slack
+
+runtime_hints:
+  default_cost_tier: T2          # T1 trust-critical | T2 routine | T3 exploratory

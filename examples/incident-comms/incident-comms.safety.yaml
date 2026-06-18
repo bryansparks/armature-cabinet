@@ -1,0 +1,42 @@
+_note: "ADVISORY. A CompiledAgent bundle carries role + skills only. These rules enforce this agent's\
+  \ brakes/trust as HARD constraints \u2014 merge them into your workflow's `safety:`/`contracts:` and\
+  \ add the gates."
+safety:
+- tool: slack:post
+  condition:
+    field: _
+    op: truthy
+  action: block
+  message: Incident Comms Partner is forbidden from 'slack:post'.
+- tool: slack:send
+  condition:
+    field: _
+    op: truthy
+  action: block
+  message: Incident Comms Partner is forbidden from 'slack:send'.
+- tool: email:send
+  condition:
+    field: _
+    op: truthy
+  action: block
+  message: Incident Comms Partner is forbidden from 'email:send'.
+- tool: pagerduty:trigger
+  condition:
+    field: _
+    op: truthy
+  action: block
+  message: Incident Comms Partner is forbidden from 'pagerduty:trigger'.
+- tool: statuspage:update
+  condition:
+    field: _
+    op: truthy
+  action: block
+  message: Incident Comms Partner is forbidden from 'statuspage:update'.
+contracts:
+  max_iterations: 8
+  _cost_ceiling_usd: 1.0
+suggested_escalation_gates:
+- confidence < 0.6
+- severity == sev1 AND audience includes customers
+- a fact in a draft can't be traced to a signal
+- a regulator-notifiable threshold may be crossed
