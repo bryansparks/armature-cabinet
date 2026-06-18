@@ -36,3 +36,5 @@ def test_incident_comms_stage_roundtrips():
     assert stage.role.type.value == "worker"
     assert len(stage.role.skills) == 2
     assert {"comms.draft-status-update"} <= set(spec.skill_library)
+    # two agents in one workflow: all 5 skills (3 appsec + 2 comms) merge without collision
+    assert len(spec.skill_library) == 5, sorted(spec.skill_library)
