@@ -6,6 +6,7 @@ from typing import Any
 
 import yaml
 
+from .errors import CabinetError
 from .model import AgentPackage, Skill
 
 _FM = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.S)
@@ -14,11 +15,18 @@ _FM = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.S)
 _SKILL_KNOWN = {"id", "name", "when", "tools", "context", "cost_tier", "version"}
 
 
-def split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
-    """Return (frontmatter_dict, body) for a markdown file with YAML frontmatter."""
+def split_frontmatter(text: str, *, source: str = "") -> tuple[dict[str, Any], str]:
+    """Return (frontmatter_dict, body) for a markdown file with YAML frontmatter.
+
+    Raises ``CabinetError`` (naming ``source``) if the frontmatter is not valid YAML.
+    """
     m = _FM.match(text)
     if m:
-        meta = yaml.safe_load(m.group(1)) or {}
+        try:
+            meta = yaml.safe_load(m.group(1)) or {}
+        except yaml.YAMLError as e:
+            where = f" in {source}" if source else ""
+            raise CabinetError(f"Malformed YAML frontmatter{where}: {e}") from e
         return meta, m.group(2).strip()
     return {}, text.strip()
 
@@ -28,7 +36,7 @@ def _read(path: Path) -> str:
 
 
 def _load_skill(path: Path) -> Skill:
-    meta, body = split_frontmatter(_read(path))
+    meta, body = split_frontmatter(_read(path), source=str(path))
     sid = meta.get("id") or meta.get("name") or path.stem
     extra = {k: v for k, v in meta.items() if k not in _SKILL_KNOWN}
     return Skill(
@@ -44,31 +52,38 @@ def _load_skill(path: Path) -> Skill:
     )
 
 
+def _load_yaml(path: Path) -> dict[str, Any]:
+    try:
+        return yaml.safe_load(_read(path)) or {}
+    except yaml.YAMLError as e:
+        raise CabinetError(f"Malformed YAML in {path}: {e}") from e
+
+
 def load_package(folder: str | Path) -> AgentPackage:
     root = Path(folder)
     if not root.is_dir():
-        raise NotADirectoryError(f"Not a cabinet agent folder: {root}")
+        raise CabinetError(f"Not a cabinet agent folder: {root}")
 
     manifest_path = root / "cabinet.yaml"
     if not manifest_path.exists():
-        raise FileNotFoundError(f"Missing cabinet.yaml manifest in {root}")
-    manifest = yaml.safe_load(_read(manifest_path)) or {}
+        raise CabinetError(f"Missing cabinet.yaml manifest in {root}")
+    manifest = _load_yaml(manifest_path)
 
     soul_meta, soul_body = ({}, "")
     if (root / "soul.md").exists():
-        soul_meta, soul_body = split_frontmatter(_read(root / "soul.md"))
+        soul_meta, soul_body = split_frontmatter(_read(root / "soul.md"), source="soul.md")
 
     mandate_meta, mandate_body = ({}, "")
     if (root / "mandate.md").exists():
-        mandate_meta, mandate_body = split_frontmatter(_read(root / "mandate.md"))
+        mandate_meta, mandate_body = split_frontmatter(_read(root / "mandate.md"), source="mandate.md")
 
     brakes: dict[str, Any] = {}
     if (root / "brakes.md").exists():
-        brakes, _ = split_frontmatter(_read(root / "brakes.md"))
+        brakes, _ = split_frontmatter(_read(root / "brakes.md"), source="brakes.md")
 
     trust: dict[str, Any] = {}
     if (root / "trust.yaml").exists():
-        trust = yaml.safe_load(_read(root / "trust.yaml")) or {}
+        trust = _load_yaml(root / "trust.yaml")
 
     skills: list[Skill] = []
     skills_dir = root / "skills"
@@ -80,7 +95,9 @@ def load_package(folder: str | Path) -> AgentPackage:
     context_dir = root / "context"
     if context_dir.is_dir():
         for cp in sorted(context_dir.glob("*.md")):
-            context[cp.name] = _read(cp).strip()
+            # key by path relative to the agent root so skill `context:` refs
+            # (e.g. "context/severity-rubric.md") resolve directly.
+            context[cp.relative_to(root).as_posix()] = _read(cp).strip()
 
     return AgentPackage(
         manifest=manifest,
