@@ -12,6 +12,7 @@ from .compiler import compile_agent, compile_safety_fragment
 from .validate import validate_package
 from .select import select_skills
 from .scaffold import build_folder
+from .library import list_agents, build_all
 
 
 def _dump(data, path: Path) -> None:
@@ -37,7 +38,23 @@ def _confirm(msg: str, default: bool = False) -> bool:
         return default
 
 
+def _cmd_build_all(args: argparse.Namespace) -> int:
+    out_dir = Path(args.out) if args.out else Path("dist")
+    bundles, errors = build_all(args.folder, out_dir, no_safety=args.no_safety)
+    for bp in bundles:
+        print(f"compiled -> {bp}")
+    for e in errors:
+        print(f"error: {e}", file=sys.stderr)
+    tail = f"compiled {len(bundles)} agent(s)"
+    if errors:
+        tail += f", {len(errors)} error(s)"
+    print(tail)
+    return 1 if errors else 0
+
+
 def cmd_build(args: argparse.Namespace) -> int:
+    if getattr(args, "all", False):
+        return _cmd_build_all(args)
     if args.when is not None and args.skill:
         print("error: --when and --skill are mutually exclusive (pick one selection mode)",
               file=sys.stderr)
@@ -132,6 +149,24 @@ def cmd_new(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_list(args: argparse.Namespace) -> int:
+    from rich.console import Console
+    from rich.table import Table
+
+    rows = list_agents(args.folder)
+    if not rows:
+        print("(no agents found)")
+        return 0
+    table = Table(title=str(args.folder))
+    for col in ["ID", "NAME", "KIND", "SKILLS", "VALID"]:
+        table.add_column(col)
+    for r in rows:
+        table.add_row(r["id"], r["name"], r["kind"], str(r["skills"]),
+                      "ok" if r["valid"] else f"FAIL ({len(r['errors'])})")
+    Console().print(table)
+    return 0 if all(r["valid"] for r in rows) else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="armature-cabinet")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -143,6 +178,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="attach only this skill id (repeatable); default attaches all")
     b.add_argument("--when", help="attach skills whose 'when' overlaps this task string")
     b.add_argument("--no-safety", action="store_true", help="skip the advisory safety fragment")
+    b.add_argument("--all", action="store_true",
+                   help="compile every agent folder in the given library directory")
     b.set_defaults(func=cmd_build)
 
     v = sub.add_parser("validate",
@@ -157,6 +194,10 @@ def main(argv: list[str] | None = None) -> int:
     n.add_argument("id", nargs="?", help="agent id / folder name (prompted if omitted)")
     n.add_argument("--out", default=".", help="parent directory to write the agent folder into (default: cwd)")
     n.set_defaults(func=cmd_new)
+
+    lst = sub.add_parser("list", help="enumerate agents in a library directory")
+    lst.add_argument("folder", help="path to the library directory")
+    lst.set_defaults(func=cmd_list)
 
     args = parser.parse_args(argv)
     try:
