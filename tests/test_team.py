@@ -93,6 +93,14 @@ def test_cli_team_dry_run_and_run_mutually_exclusive(tmp_path):
     assert rc == 1
 
 
+def test_cli_team_duplicate_agent_errors(tmp_path):
+    lib, dist = _build_lib(tmp_path)
+    rc = main(["team", str(lib), "--agent", "a", "--agent", "a",
+               "--bundles", str(dist), "--out", str(tmp_path / "t.yml")])
+    assert rc == 1
+    assert not (tmp_path / "t.yml").exists()
+
+
 def test_cli_team_dry_run_validates_via_armature(tmp_path):
     if not shutil.which("armature"):
         pytest.skip("armature CLI not on PATH")

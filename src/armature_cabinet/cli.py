@@ -183,6 +183,9 @@ def cmd_team(args: argparse.Namespace) -> int:
             ordered.append(a)
     else:
         ordered = sorted(by_id)
+    if len(set(ordered)) != len(ordered):
+        print(f"error: duplicate --agent id in: {', '.join(ordered)}", file=sys.stderr)
+        return 1
     if not ordered:
         print(f"error: no agents found in library {args.folder}", file=sys.stderr)
         return 1
