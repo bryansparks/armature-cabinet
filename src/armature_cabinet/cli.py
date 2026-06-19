@@ -13,6 +13,7 @@ from .validate import validate_package
 from .select import select_skills
 from .scaffold import build_folder
 from .library import list_agents, build_all
+from .team import generate_workflow, run_workflow
 
 
 def _dump(data, path: Path) -> None:
@@ -167,6 +168,43 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0 if all(r["valid"] for r in rows) else 1
 
 
+def cmd_team(args: argparse.Namespace) -> int:
+    if args.dry_run and args.run:
+        print("error: --dry-run and --run are mutually exclusive", file=sys.stderr)
+        return 1
+    rows = list_agents(args.folder)
+    by_id = {r["id"]: r for r in rows}
+    if args.agent:
+        ordered = []
+        for a in args.agent:
+            if a not in by_id:
+                print(f"error: agent '{a}' not found in library {args.folder}", file=sys.stderr)
+                return 1
+            ordered.append(a)
+    else:
+        ordered = sorted(by_id)
+    if not ordered:
+        print(f"error: no agents found in library {args.folder}", file=sys.stderr)
+        return 1
+    bundles = Path(args.bundles)
+    missing = [a for a in ordered if not (bundles / a / "agent.yaml").exists()]
+    if missing:
+        print(f"error: missing compiled bundle(s) for: {', '.join(missing)}", file=sys.stderr)
+        print(f"       run: armature-cabinet build --all {args.folder} --bundles {bundles}",
+              file=sys.stderr)
+        return 1
+    name = args.name or f"{Path(args.folder).name}-team"
+    wf_dict = generate_workflow(ordered, bundles, name)
+    out = Path(args.out)
+    _dump(wf_dict, out)
+    print(f"wrote {out}")
+    print(f"  validate: armature run --dry-run {out}")
+    print(f"  execute:  armature run {out}")
+    if args.dry_run or args.run:
+        return run_workflow(out, dry_run=args.dry_run)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="armature-cabinet")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -198,6 +236,21 @@ def main(argv: list[str] | None = None) -> int:
     lst = sub.add_parser("list", help="enumerate agents in a library directory")
     lst.add_argument("folder", help="path to the library directory")
     lst.set_defaults(func=cmd_list)
+
+    t = sub.add_parser("team",
+                       help="generate a team workflow from a library of agents (hand off to armature run)")
+    t.add_argument("folder", help="path to the library directory")
+    t.add_argument("--agent", action="append",
+                   help="agent id to include, in this order (repeatable; default: all, alphabetical)")
+    t.add_argument("--bundles", default="dist",
+                   help="directory of compiled bundles (default: dist)")
+    t.add_argument("--out", default="team.yml", help="output workflow path (default: team.yml)")
+    t.add_argument("--name", help="workflow name (default: <library-dir>-team)")
+    t.add_argument("--dry-run", action="store_true",
+                   help="validate via armature run --dry-run (no API key needed)")
+    t.add_argument("--run", action="store_true",
+                   help="execute via armature run (needs a provider/API key)")
+    t.set_defaults(func=cmd_team)
 
     args = parser.parse_args(argv)
     try:
