@@ -4,6 +4,7 @@ from pathlib import Path
 
 import yaml
 
+from .errors import CabinetError
 from .loader import load_package
 from .validate import validate_package
 from .compiler import compile_agent, compile_safety_fragment
@@ -15,14 +16,14 @@ def _agent_dirs(library_dir):
     """Subdirectories of library_dir that contain cabinet.yaml, sorted by name."""
     root = Path(library_dir)
     if not root.is_dir():
-        raise NotADirectoryError(f"Not a library directory: {root}")
+        raise CabinetError(f"Not a library directory: {root}")
     return [d for d in sorted(root.iterdir()) if d.is_dir() and (d / "cabinet.yaml").exists()]
 
 
 def list_agents(library_dir) -> list[dict]:
     """Enumerate agents in library_dir; return [{id,name,kind,skills,valid,errors}] sorted by id.
 
-    Never raises: load/validate failures are captured per-agent as valid=False + errors.
+    Never raises on per-agent load/validate failures (a bad/missing library path raises CabinetError).
     """
     rows: list[dict] = []
     for d in _agent_dirs(library_dir):

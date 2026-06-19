@@ -90,3 +90,12 @@ def test_cli_build_all_nonzero_on_failure(tmp_path):
     rc = main(["build", str(lib), "--all", "-o", str(out)])
     assert rc == 1
     assert (out / "good" / "agent.yaml").exists()  # good still compiled
+
+
+def test_list_bad_library_path_is_a_clean_error(tmp_path, capsys):
+    from armature_cabinet.cli import main
+    rc = main(["list", str(tmp_path / "does-not-exist")])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "error:" in err
+    assert "Traceback" not in err
