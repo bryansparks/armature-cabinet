@@ -6,6 +6,7 @@ from .validate import validate_package
 from .select import select_skills
 from .scaffold import build_folder, slugify
 from .library import list_agents, build_all
+from .team import generate_workflow, run_workflow
 
 __all__ = [
     "CabinetError",
@@ -19,5 +20,7 @@ __all__ = [
     "slugify",
     "list_agents",
     "build_all",
+    "generate_workflow",
+    "run_workflow",
 ]
 __version__ = "0.1.0"
