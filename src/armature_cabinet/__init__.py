@@ -4,6 +4,7 @@ from .loader import load_package
 from .compiler import compile_agent, compile_safety_fragment, compose_description
 from .validate import validate_package
 from .select import select_skills
+from .scaffold import build_folder, slugify
 
 __all__ = [
     "CabinetError",
@@ -13,5 +14,7 @@ __all__ = [
     "compose_description",
     "validate_package",
     "select_skills",
+    "build_folder",
+    "slugify",
 ]
 __version__ = "0.1.0"
