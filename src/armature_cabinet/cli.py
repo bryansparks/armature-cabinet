@@ -11,6 +11,7 @@ from .loader import load_package
 from .compiler import compile_agent, compile_safety_fragment
 from .validate import validate_package
 from .select import select_skills
+from .scaffold import build_folder
 
 
 def _dump(data, path: Path) -> None:
@@ -24,6 +25,16 @@ def _report(r) -> None:
         print(f"warning: {w}", file=sys.stderr)
     for e in r.errors:
         print(f"error: {e}", file=sys.stderr)
+
+
+def _confirm(msg: str, default: bool = False) -> bool:
+    from questionary import confirm
+    try:
+        return bool(confirm(msg, default=default).ask())
+    except (EOFError, OSError):
+        # Non-interactive (no TTY / piped stdin): fall back to the default so
+        # `armature-cabinet new` never crashes when stdout/stdin is redirected.
+        return default
 
 
 def cmd_build(args: argparse.Namespace) -> int:
@@ -89,6 +100,39 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 1
 
 
+def cmd_new(args: argparse.Namespace) -> int:
+    from .prompts import collect_answers  # lazy: questionary only needed for `new`
+    from .compiler import compile_safety_fragment
+
+    answers = collect_answers(args.id)
+    out_dir = Path(args.out)
+    try:
+        root = build_folder(answers, out_dir)
+    except FileExistsError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+    pkg = load_package(root)
+    r = validate_package(pkg)
+    _report(r)
+    if not r.ok:
+        print(f"created '{answers['id']}' at {root} — fix the issues above, then re-run.",
+              file=sys.stderr)
+        return 1
+
+    print(f"created '{answers['id']}' at {root}")
+    if _confirm("Build the bundle now (writes dist/<id>/)?"):
+        bundle = compile_agent(pkg)
+        bundle_dir = Path("dist") / pkg.id
+        _dump(bundle, bundle_dir / "agent.yaml")
+        fragment = compile_safety_fragment(pkg)
+        if len(fragment) > 1:
+            _dump(fragment, bundle_dir / f"{pkg.id}.safety.yaml")
+        print(f"  bundle  -> {bundle_dir / 'agent.yaml'}")
+    print(f"next: armature-cabinet validate {root}  |  armature-cabinet build {root}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="armature-cabinet")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -109,6 +153,11 @@ def main(argv: list[str] | None = None) -> int:
                    help="check only this skill id (repeatable); default checks all")
     v.add_argument("--when", help="preview skills whose 'when' overlaps this task string")
     v.set_defaults(func=cmd_validate)
+
+    n = sub.add_parser("new", help="interactively create a cabinet agent folder")
+    n.add_argument("id", nargs="?", help="agent id / folder name (prompted if omitted)")
+    n.add_argument("--out", default=".", help="parent directory to write the agent folder into (default: cwd)")
+    n.set_defaults(func=cmd_new)
 
     args = parser.parse_args(argv)
     try:
