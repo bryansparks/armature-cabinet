@@ -102,7 +102,6 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 def cmd_new(args: argparse.Namespace) -> int:
     from .prompts import collect_answers  # lazy: questionary only needed for `new`
-    from .compiler import compile_safety_fragment
 
     answers = collect_answers(args.id)
     out_dir = Path(args.out)
@@ -116,8 +115,8 @@ def cmd_new(args: argparse.Namespace) -> int:
     r = validate_package(pkg)
     _report(r)
     if not r.ok:
-        print(f"created '{answers['id']}' at {root} — fix the issues above, then re-run.",
-              file=sys.stderr)
+        print(f"created '{answers['id']}' at {root} — fix the issues above in that folder, "
+              f"then run: armature-cabinet validate {root}", file=sys.stderr)
         return 1
 
     print(f"created '{answers['id']}' at {root}")

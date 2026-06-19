@@ -56,10 +56,27 @@ def build_folder(answers: dict, out_dir: Path) -> Path:
     if has_mandate:
         blocks["mandate"] = "mandate.md"
     cabinet["blocks"] = blocks
+    # A confirmed-but-empty block is treated as absent so we don't write a
+    # degenerate file (and so cabinet.yaml doesn't reference a missing file).
+    bk = answers.get("brakes")
+    has_brakes = bk is not None and any([
+        bk.get("cost_ceiling_usd") is not None,
+        bk.get("max_iterations") is not None,
+        _listify(bk.get("forbidden_actions")),
+        _listify(bk.get("halt_and_ask_when")),
+        (bk.get("body") or "").strip(),
+    ])
+    tr = answers.get("trust")
+    has_trust = tr is not None and any([
+        tr.get("show_work"),
+        tr.get("cite_sources"),
+        tr.get("uncertainty"),
+        _listify(tr.get("escalate_when")),
+    ])
     blocks_extra: dict = {}
-    if answers.get("brakes") is not None:
+    if has_brakes:
         blocks_extra["brakes"] = "brakes.md"
-    if answers.get("trust") is not None:
+    if has_trust:
         blocks_extra["trust"] = "trust.yaml"
     if answers.get("skills"):
         blocks_extra["skills"] = "skills/"
@@ -100,9 +117,8 @@ def build_folder(answers: dict, out_dir: Path) -> Path:
             mandate += answers["mandate_body"].strip() + "\n"
         _write(root / "mandate.md", mandate)
 
-    # brakes.md (only if the block was provided)
-    bk = answers.get("brakes")
-    if bk is not None:
+    # brakes.md (only if the block was provided AND non-empty)
+    if has_brakes:
         bk_meta: dict = {}
         if bk.get("cost_ceiling_usd") is not None:
             bk_meta["cost_ceiling_usd"] = bk["cost_ceiling_usd"]
@@ -117,9 +133,8 @@ def build_folder(answers: dict, out_dir: Path) -> Path:
             brakes += bk["body"].strip() + "\n"
         _write(root / "brakes.md", brakes)
 
-    # trust.yaml (only if the block was provided)
-    tr = answers.get("trust")
-    if tr is not None:
+    # trust.yaml (only if the block was provided AND non-empty)
+    if has_trust:
         trust: dict = {}
         if tr.get("show_work"):
             trust["show_work"] = tr["show_work"]

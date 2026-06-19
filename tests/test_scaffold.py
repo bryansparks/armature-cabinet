@@ -85,3 +85,20 @@ def test_context_stub_created_for_ref(tmp_path):
                     "cost_tier": None, "version": "0.1.0", "outputs": None, "body": "b"}]}, tmp_path)
     assert "TODO" in (root / "context" / "r.md").read_text()
     assert validate_package(load_package(root)).ok
+
+
+def test_brakes_confirmed_but_empty_writes_no_brakes(tmp_path):
+    root = build_folder({"id": "eb", "kind": "partner", "role": "R",
+        "brakes": {"cost_ceiling_usd": None, "max_iterations": None,
+                   "forbidden_actions": [], "halt_and_ask_when": [], "body": ""},
+        "trust": None, "skills": []}, tmp_path)
+    assert not (root / "brakes.md").exists()
+    assert validate_package(load_package(root)).ok
+
+
+def test_trust_all_none_writes_no_trust(tmp_path):
+    root = build_folder({"id": "et", "kind": "partner", "role": "R", "brakes": None,
+        "trust": {"show_work": None, "cite_sources": None, "uncertainty": None, "escalate_when": []},
+        "skills": []}, tmp_path)
+    assert not (root / "trust.yaml").exists()
+    assert validate_package(load_package(root)).ok
