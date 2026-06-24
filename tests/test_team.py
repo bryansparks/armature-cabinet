@@ -18,7 +18,7 @@ def test_generate_workflow_structure(tmp_path):
     assert wf["name"] == "lib-team"
     assert wf["version"] == "1.0"
     assert wf["model_tiers"]["small"]["model"] == "claude-haiku-4-5-20251001"
-    assert wf["role_type_defaults"]["worker"] == "small"
+    assert wf["role_type_defaults"] == {"worker": "small", "orchestrator": "small", "judge": "small", "researcher": "small"}
     assert set(wf["agent_library"]) == {"a", "b"}
     assert wf["agent_library"]["a"]["path"] == str((tmp_path / "dist" / "a" / "agent.yaml").resolve())
     stages = wf["stages"]

@@ -29,7 +29,7 @@ def generate_workflow(agent_ids: list[str], bundles_dir: Path, name: str) -> dic
         "name": name,
         "version": "1.0",
         "model_tiers": _MODEL_TIERS,
-        "role_type_defaults": {"worker": "small"},
+        "role_type_defaults": {rt: "small" for rt in ("worker", "orchestrator", "judge", "researcher")},
         "agent_library": agent_library,
         "stages": stages,
     }
