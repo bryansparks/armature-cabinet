@@ -1,6 +1,7 @@
 """`armature-cabinet build|validate <folder>` — compile / check a cabinet agent."""
 from __future__ import annotations
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -14,6 +15,15 @@ from .select import select_skills
 from .scaffold import build_folder
 from .library import list_agents, build_all
 from .team import generate_workflow, run_workflow
+from .evolve.orchestrator import run_evolve_cycle
+from .evolve.verifier import verify_predictions
+from .evolve.versioning import (
+    read_latest,
+    rollback as evolve_rollback,
+    promote as evolve_promote,
+    ThresholdPromotionPolicy,
+)
+from .evolve.trace_reader import read_summary
 
 
 def _dump(data, path: Path) -> None:
@@ -208,6 +218,62 @@ def cmd_team(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_skill_tools(specs: list[str] | None) -> dict[str, list[str]]:
+    """Parse repeated `--skill-tools skill_id=tool1,tool2` flags into a dict."""
+    out: dict[str, list[str]] = {}
+    for s in specs or []:
+        sid, _, tools = s.partition("=")
+        out[sid.strip()] = [t.strip() for t in tools.split(",") if t.strip()]
+    return out
+
+
+def cmd_evolve(args: argparse.Namespace) -> int:
+    folder = Path(args.folder)
+    pkg = load_package(folder)
+
+    # --verify: check the prior cycle's predicted_fixes against fresh traces.
+    if args.verify:
+        latest = read_latest(folder)
+        if not latest:
+            print("no promoted version to verify", file=sys.stderr)
+            return 1
+        prior = json.loads((folder / "versions" / latest / ".proposal.json").read_text(encoding="utf-8"))
+        summary = read_summary(Path(args.traces_db), agent_id=pkg.id,
+                               agent_version=pkg.manifest.get("version"),
+                               skill_tools=_parse_skill_tools(args.skill_tools),
+                               min_traces=1)
+        if summary is None:
+            print("insufficient traces to verify", file=sys.stderr)
+            return 1
+        res = verify_predictions(prior_predicted_fixes=prior.get("predicted_fixes", []),
+                                 prior_hqs=prior.get("hqs"), current=summary)
+        print(json.dumps(res.__dict__, indent=2))
+        return 0
+
+    # --rollback: restore the agent folder from a prior version snapshot.
+    if args.rollback:
+        evolve_rollback(folder, args.rollback)
+        print(f"rolled back to {args.rollback}")
+        return 0
+
+    # --promote: explicit human ack to advance the latest pointer.
+    if args.promote:
+        evolve_promote(folder, args.promote, policy=ThresholdPromotionPolicy(),
+                       current_hqs=None, new_hqs=1.0, force=True)
+        print(f"promoted {args.promote} (manual)")
+        return 0
+
+    # Default: run one evolve cycle.
+    res = run_evolve_cycle(folder, traces_db=Path(args.traces_db),
+                           skill_tools=_parse_skill_tools(args.skill_tools),
+                           apply=args.apply, review=args.review,
+                           current_version=pkg.manifest.get("version"))
+    print(f"rule={res.rule_id} target={res.target_file} gate={res.gate} "
+          f"applied={res.applied} version={res.version} promoted={res.promoted}")
+    print(f"  {res.rationale}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="armature-cabinet")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -254,6 +320,25 @@ def main(argv: list[str] | None = None) -> int:
     t.add_argument("--run", action="store_true",
                    help="execute via armature run (needs a provider/API key)")
     t.set_defaults(func=cmd_team)
+
+    e = sub.add_parser("evolve",
+                       help="improve a cabinet agent from armature run traces (one cycle)")
+    e.add_argument("folder", help="path to the cabinet agent folder")
+    e.add_argument("--traces-db", default=str(Path.home() / ".armature" / "traces.db"),
+                   help="armature traces sqlite db (default: ~/.armature/traces.db)")
+    e.add_argument("--skill-tools", action="append",
+                   help="skill_id=tool1,tool2 (repeatable); maps skills to their declared tools")
+    e.add_argument("--apply", action="store_true",
+                   help="auto-apply safe (prose/skill) surfaces; guardrails still require --promote")
+    e.add_argument("--review", action="store_true",
+                   help="emit .pending patches only; apply nothing")
+    e.add_argument("--verify", action="store_true",
+                   help="verify the prior cycle's predicted_fixes against fresh traces")
+    e.add_argument("--rollback", metavar="VERSION",
+                   help="restore the agent folder from a prior version snapshot")
+    e.add_argument("--promote", metavar="VERSION",
+                   help="manually advance the latest pointer to VERSION (explicit human ack)")
+    e.set_defaults(func=cmd_evolve)
 
     args = parser.parse_args(argv)
     try:
