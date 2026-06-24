@@ -264,10 +264,25 @@ def cmd_evolve(args: argparse.Namespace) -> int:
         return 0
 
     # Default: run one evolve cycle.
+    # Thread the prior promoted version's HQS into promote() so the HQS gate
+    # works on the CLI path: ThresholdPromotionPolicy auto-promotes only when
+    # current_hqs is None (first cycle). Without this, every --apply cycle
+    # would auto-promote regardless of HQS gain. The data is already on disk:
+    # write_version stores .proposal.json with {"version","hqs",...} per
+    # version, and read_latest() resolves the promoted version.
+    current_hqs: float | None = None
+    latest = read_latest(folder)
+    if latest:
+        prior = json.loads(
+            (folder / "versions" / latest / ".proposal.json").read_text(encoding="utf-8")
+        )
+        current_hqs = prior.get("hqs")
+
     res = run_evolve_cycle(folder, traces_db=Path(args.traces_db),
                            skill_tools=_parse_skill_tools(args.skill_tools),
                            apply=args.apply, review=args.review,
-                           current_version=pkg.manifest.get("version"))
+                           current_version=pkg.manifest.get("version"),
+                           current_hqs=current_hqs)
     print(f"rule={res.rule_id} target={res.target_file} gate={res.gate} "
           f"applied={res.applied} version={res.version} promoted={res.promoted}")
     print(f"  {res.rationale}")

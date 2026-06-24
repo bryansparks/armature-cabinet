@@ -19,11 +19,13 @@ Asserts:
 
 Marked ``slow`` so it can be deselected in fast runs: ``pytest -m 'not slow'``.
 """
+import json
 import shutil
 import sqlite3
 from pathlib import Path
 
 import pytest
+import yaml
 
 from armature_cabinet.cli import main
 from armature_cabinet.evolve.versioning import (
@@ -38,13 +40,20 @@ pytestmark = pytest.mark.slow
 _AGENT_SRC = Path(__file__).parent.parent / "agents" / "gmail-reader"
 
 
-def _seed(db: Path) -> None:
+def _seed(db: Path, *, agent_version: str = "0.1.0",
+          all_failing: bool = False) -> None:
     """Seed a synthetic trace DB that triggers R1 (OUTPUT_INVALID on draft-reply).
 
-    5 runs: 4 fail OUTPUT_INVALID on the ``draft-reply`` skill, 1 healthy on
-    ``triage-inbox``. The attribution columns (``agent_id``, ``agent_version``,
-    ``active_skill_ids_json``) are populated so the trace reader uses the
-    enriched (non-heuristic) path and routes R1 to ``skills/draft-reply.md``.
+    By default (``all_failing=False``): 5 runs, 4 fail OUTPUT_INVALID on the
+    ``draft-reply`` skill + 1 healthy on ``triage-inbox``. The attribution
+    columns (``agent_id``, ``agent_version``, ``active_skill_ids_json``) are
+    populated so the trace reader uses the enriched (non-heuristic) path and
+    routes R1 to ``skills/draft-reply.md``. HQS for this mix is ~0.43.
+
+    When ``all_failing=True``: 5 runs ALL failing OUTPUT_INVALID on
+    ``draft-reply`` (no healthy run). HQS drops to ~0.30, which is below the
+    cycle-1 HQS minus ``hqs_promote_min`` — so the HQS gate must block
+    promotion on a second cycle.
     """
     con = sqlite3.connect(db)
     con.execute("""CREATE TABLE traces (
@@ -59,25 +68,27 @@ def _seed(db: Path) -> None:
         input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0,
         agent_id TEXT, agent_version TEXT, active_skill_ids_json TEXT DEFAULT '[]')""")
     # 4 failing runs: OUTPUT_INVALID on draft-reply (tools called, invalid output).
-    for _ in range(4):
+    n_fail = 5 if all_failing else 4
+    for _ in range(n_fail):
         con.execute(
             "INSERT INTO traces (run_id, workflow_name, stage_id, role_type, model, "
             "success, output_valid, error_type, agent_id, agent_version, "
             "active_skill_ids_json, tools_declared_json, tools_called_json) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             ("r", "wf", "reply", "worker", "m", 0, 0, "ParseError",
-             "gmail-reader", "0.1.0", '["draft-reply"]',
+             "gmail-reader", agent_version, '["draft-reply"]',
              '["gmail:draft.create"]', '["gmail:draft.create"]'),
         )
-    # 1 healthy run on triage-inbox (tools declared + called -> healthy skill).
-    con.execute(
-        "INSERT INTO traces (run_id, workflow_name, stage_id, role_type, model, "
-        "success, output_valid, agent_id, agent_version, active_skill_ids_json, "
-        "tools_declared_json, tools_called_json) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        ("r", "wf", "triage", "worker", "m", 1, 1, "gmail-reader", "0.1.0",
-         '["triage-inbox"]', '["gmail:messages.list"]', '["gmail:messages.list"]'),
-    )
+    if not all_failing:
+        # 1 healthy run on triage-inbox (tools declared + called -> healthy skill).
+        con.execute(
+            "INSERT INTO traces (run_id, workflow_name, stage_id, role_type, model, "
+            "success, output_valid, agent_id, agent_version, active_skill_ids_json, "
+            "tools_declared_json, tools_called_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("r", "wf", "triage", "worker", "m", 1, 1, "gmail-reader", agent_version,
+             '["triage-inbox"]', '["gmail:messages.list"]', '["gmail:messages.list"]'),
+        )
     con.commit()
     con.close()
 
@@ -92,6 +103,22 @@ def _run_cycle(agent: Path, db: Path, monkeypatch) -> int:
         "--skill-tools", "draft-reply=gmail:draft.create",
         "--skill-tools", "triage-inbox=gmail:messages.list",
     ])
+
+
+def _bump_manifest(agent: Path, new_version: str) -> None:
+    """Bump the ``version`` field in the agent's cabinet.yaml.
+
+    Simulates the operator advancing the live manifest to the promoted
+    version between cycles, so a subsequent cycle produces a distinct
+    bumped version (and the trace reader filters traces by the new version).
+    """
+    cyaml = agent / "cabinet.yaml"
+    data = yaml.safe_load(cyaml.read_text(encoding="utf-8"))
+    data["version"] = new_version
+    cyaml.write_text(
+        yaml.safe_dump(data, sort_keys=False, default_flow_style=False, width=100),
+        encoding="utf-8",
+    )
 
 
 def test_evolve_cycle_routes_r1_and_versions(tmp_path: Path, monkeypatch):
@@ -131,7 +158,8 @@ def test_evolve_cycle_routes_r1_and_versions(tmp_path: Path, monkeypatch):
     from armature_cabinet.evolve.versioning import write_version
     write_version(agent, version="0.1.2", hqs=0.01,
                   predicted_fixes=["output_invalid:stub"])
-    rules_hqs_min = 0.02  # from routing_rules.yaml (hqs_promote_min)
+    from armature_cabinet.evolve.router import load_rules
+    rules_hqs_min = float(load_rules()["hqs_promote_min"])
     promoted = evolve_promote(
         agent, "0.1.2",
         policy=ThresholdPromotionPolicy(min_gain=rules_hqs_min),
@@ -152,3 +180,62 @@ def test_evolve_cycle_routes_r1_and_versions(tmp_path: Path, monkeypatch):
     assert read_latest(agent2) == "0.1.1"
     # Deterministic: patched content matches the first run.
     assert text2 == text
+
+
+def test_evolve_hqs_gate_blocks_promote_on_regression(tmp_path: Path, monkeypatch):
+    """Two --apply cycles through the real CLI/orchestrator path prove the HQS
+    gate works end-to-end on the CLI path.
+
+    Cycle 1: no prior version -> current_hqs=None -> ThresholdPromotionPolicy
+    auto-promotes; latest advances to 0.1.1.
+
+    Cycle 2: the prior promoted version's HQS (~0.43) is threaded into
+    promote() from the CLI (read from .proposal.json). A fresh trace DB with
+    a LOWER HQS (~0.30, all-failing) is seeded. ThresholdPromotionPolicy
+    returns False (new - current < min_gain), so latest does NOT advance and
+    promoted is False. This is the regression that would have occurred had the
+    CLI not threaded prior-version HQS into promote().
+    """
+    agent = tmp_path / "gmail-reader"
+    shutil.copytree(_AGENT_SRC, agent)
+
+    # Cycle 1: 4 fail + 1 healthy -> HQS ~0.43, current_hqs=None -> promotes.
+    db1 = tmp_path / "traces1.db"
+    _seed(db1)  # agent_version="0.1.0"
+    rc = _run_cycle(agent, db1, monkeypatch)
+    assert rc == 0
+    assert read_latest(agent) == "0.1.1"  # first cycle auto-promotes
+
+    # The promoted version's .proposal.json carries the HQS the CLI threads
+    # into the next cycle's promote() call.
+    proposal = json.loads(
+        (agent / "versions" / "0.1.1" / ".proposal.json").read_text(encoding="utf-8")
+    )
+    prior_hqs = proposal["hqs"]
+    assert prior_hqs is not None and prior_hqs > 0.4  # ~0.43
+
+    # Advance the live manifest to the promoted version so cycle 2 bumps to a
+    # distinct version (0.1.2) and the trace reader filters by the new version.
+    _bump_manifest(agent, "0.1.1")
+
+    # Cycle 2: all 5 traces failing -> HQS ~0.30, below prior_hqs - min_gain.
+    # The CLI reads prior_hqs from versions/0.1.1/.proposal.json and passes
+    # current_hqs=prior_hqs into run_evolve_cycle -> promote().
+    db2 = tmp_path / "traces2.db"
+    _seed(db2, agent_version="0.1.1", all_failing=True)
+    rc2 = _run_cycle(agent, db2, monkeypatch)
+    assert rc2 == 0
+
+    # The new version 0.1.2 snapshot was written (apply succeeded)...
+    assert (agent / "versions" / "0.1.2").is_dir()
+    # ...but the HQS gate blocked promotion: latest stays 0.1.1.
+    assert read_latest(agent) == "0.1.1"
+    # The cycle wrote 0.1.2's .proposal.json with the lower HQS.
+    proposal2 = json.loads(
+        (agent / "versions" / "0.1.2" / ".proposal.json").read_text(encoding="utf-8")
+    )
+    new_hqs = proposal2["hqs"]
+    assert new_hqs < prior_hqs  # regression
+    from armature_cabinet.evolve.router import load_rules
+    min_gain = float(load_rules()["hqs_promote_min"])
+    assert (new_hqs - prior_hqs) < min_gain  # gate correctly blocks

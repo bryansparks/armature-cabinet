@@ -66,11 +66,8 @@ def apply_patch_to_folder(folder: Path, proposal: FileProposal) -> None:
     original = target.read_text(encoding="utf-8")
     meta, body = split_frontmatter(original, source=proposal.target_file)
 
-    try:
-        meta = _apply_frontmatter(meta, proposal.frontmatter_changes)
-        body = _apply_body(body, proposal.body_changes)
-    except PatchReject:
-        raise
+    meta = _apply_frontmatter(meta, proposal.frontmatter_changes)
+    body = _apply_body(body, proposal.body_changes)
 
     if meta:
         dumped = yaml.safe_dump(
