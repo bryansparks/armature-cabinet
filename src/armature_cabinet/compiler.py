@@ -138,6 +138,13 @@ def compile_agent(pkg: AgentPackage, *, include: list[str] | None = None) -> dic
     schema_version = pkg.manifest.get("schema_version")
     if schema_version is not None:
         role["x_schema_version"] = schema_version
+    version = pkg.manifest.get("version")
+    if version is not None:
+        role["x_agent_version"] = version
+    for _rich in ("summary", "tags", "maturity", "runtime_hints"):
+        val = pkg.manifest.get(_rich)
+        if val is not None:
+            role[f"x_{_rich}"] = val
     skill_library = {s.id: _skill_entry(s, pkg) for s in skills}
     return {"role": role, "skill_library": skill_library}
 
