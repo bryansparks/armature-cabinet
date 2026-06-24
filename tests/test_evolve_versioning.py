@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from armature_cabinet.evolve.versioning import (
     write_version, promote, rollback, read_latest, ThresholdPromotionPolicy,
@@ -13,7 +12,7 @@ def _make_agent(tmp_path: Path):
 
 def test_write_version_snapshots_folder(tmp_path: Path):
     _make_agent(tmp_path)
-    v = write_version(tmp_path, version="0.2.0", hqs=0.7, predicted_fixes=["output_invalid:x"])
+    write_version(tmp_path, version="0.2.0", hqs=0.7, predicted_fixes=["output_invalid:x"])
     assert (tmp_path / "versions" / "0.2.0" / "cabinet.yaml").exists()
     assert (tmp_path / "versions" / "0.2.0" / "soul.md").exists()
     assert (tmp_path / "versions" / "0.2.0" / ".proposal.json").exists()

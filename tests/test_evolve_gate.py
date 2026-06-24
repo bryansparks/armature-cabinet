@@ -1,6 +1,6 @@
 # tests/test_evolve_gate.py
 import pytest
-from armature_cabinet.evolve.surface_gate import decide_gate, ApplyFlagError
+from armature_cabinet.evolve.surface_gate import decide_gate
 from armature_cabinet.evolve.types import RoutingDecision
 
 

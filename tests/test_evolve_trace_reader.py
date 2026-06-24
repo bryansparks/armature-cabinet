@@ -100,7 +100,8 @@ def test_read_summary_unions_tools_called_across_rows(tmp_path: Path):
         policy_version, inputs_provenance_json, tools_declared_json, tools_called_json,
         sandbox_image_digest, loop_iteration, agent_id, agent_version, active_skill_ids_json)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", rows)
-    con.commit(); con.close()
+    con.commit()
+    con.close()
 
     s = read_summary(db, agent_id="gmail-reader", agent_version="0.2.0",
                      skill_tools={"draft-reply": ["gmail:draft.create"]})
@@ -124,7 +125,8 @@ def test_read_summary_marks_heuristic_when_columns_absent(tmp_path: Path):
         outputs_json TEXT DEFAULT '{}', tools_declared_json TEXT DEFAULT '[]',
         tools_called_json TEXT DEFAULT '[]')""")
     con.execute("INSERT INTO traces (run_id,workflow_name,stage_id,role_type,model,success,output_valid,error_type) VALUES ('r1','wf','s1','worker','m',0,0,'ParseError')")
-    con.commit(); con.close()
+    con.commit()
+    con.close()
     s = read_summary(db, agent_id="gmail-reader", agent_version="0.2.0", skill_tools={})
     assert s.heuristic is True
     assert s.n_traces == 1

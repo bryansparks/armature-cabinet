@@ -11,7 +11,7 @@ from armature_cabinet.evolve.lora_handoff import (
     decide_lora,
     handoff_to_adapter,
 )
-from armature_cabinet.evolve.types import AgentTraceSummary, RoutingDecision, SkillStats
+from armature_cabinet.evolve.types import AgentTraceSummary, SkillStats
 
 
 def _summary(symptoms, skills):
