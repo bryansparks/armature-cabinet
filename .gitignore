@@ -10,3 +10,6 @@ __pycache__/
 /files (5).zip
 /compiler.py
 /agent.yaml
+
+# internal planning docs (local only, not published)
+/docs/superpowers/
