@@ -18,7 +18,6 @@ DEFAULT_DB = Path.home() / ".armature" / "traces.db"
 # symptoms we model, derived from the error_type / output_valid columns
 _SYM_INVALID = "OUTPUT_INVALID"
 _SYM_REFUSAL = "REFUSAL_OR_FALSE_HALT"
-_SYM_HALLUCINATION = "HALLUCINATION_OR_UNCITED"
 _SYM_LOW_SKILL = "LOW_SKILL_ACTIVATION"
 
 
@@ -79,7 +78,7 @@ def read_summary(db_path: Path | str, *, agent_id: str, agent_version: str | Non
         for sid in active:
             stats = per_skill.setdefault(sid, SkillStats(sid))
             stats.tools_declared = list(skill_tools.get(sid, []))
-            stats.tools_called = list(tools_called)
+            stats.tools_called = list(set(stats.tools_called) | set(tools_called))
             if not ok:
                 stats.fail_count += 1
             stats.escalation += esc
@@ -99,8 +98,6 @@ def read_summary(db_path: Path | str, *, agent_id: str, agent_version: str | Non
     hfr = sum(1 for r in rows if (r["escalation_count"] if "escalation_count" in r.keys() else 0) == 0) / n
     hqs = 0.35 * (valid / n) + 0.25 * (successes / n) + 0.20 * avg_quorum + 0.10 * latency_score + 0.10 * hfr
 
-    for sid, st in per_skill.items():
-        st.output_valid_rate = 1.0  # refined below
     # per-skill output_valid_rate: approximation = stage valid where skill was active
     # (precise per-skill validity needs per-skill error tagging; v1 uses stage-level)
     for sid, st in per_skill.items():
