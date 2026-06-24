@@ -93,7 +93,7 @@ def compose_description(pkg: AgentPackage) -> str:
 def _skill_entry(s: Skill, pkg: AgentPackage) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "id": s.id,
-        "description": s.name or (s.when or s.id),
+        "description": s.description or s.name or s.when or s.id,
         "content": s.body,
     }
     # thick metadata preserved via Armature's extra="allow"; x_ prefix keeps it clear

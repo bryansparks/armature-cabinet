@@ -12,7 +12,7 @@ from .model import AgentPackage, Skill
 _FM = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.S)
 
 # fields consumed explicitly off a skill's frontmatter; the rest fall into extra
-_SKILL_KNOWN = {"id", "name", "when", "tools", "context", "cost_tier", "version"}
+_SKILL_KNOWN = {"id", "name", "description", "when", "tools", "context", "cost_tier", "version"}
 
 
 def split_frontmatter(text: str, *, source: str = "") -> tuple[dict[str, Any], str]:
@@ -43,6 +43,7 @@ def _load_skill(path: Path) -> Skill:
         id=sid,
         body=body,
         name=meta.get("name"),
+        description=meta.get("description"),
         when=meta.get("when"),
         tools=list(meta.get("tools") or []),
         context=list(meta.get("context") or []),

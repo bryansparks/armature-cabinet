@@ -75,3 +75,18 @@ def test_skill_extra_passed_through_as_x():
     b = compile_agent(load_package(FIX))
     # rank-findings.md frontmatter has `outputs: Finding[]`
     assert b["skill_library"]["appsec.rank-findings"]["x_outputs"] == "Finding[]"
+
+
+def test_grabbed_skill_md_description_becomes_skilldef_description(tmp_path):
+    """A grabbed SKILL.md (name + description + body, no id) compiles with the
+    description as the SkillDef.description — not as x_description (extra)."""
+    (tmp_path / "cabinet.yaml").write_text(
+        "id: t\nname: T\nkind: partner\nschema_version: '0.1.0'\n")
+    (tmp_path / "soul.md").write_text("---\nrole: R\n---\nbody\n")
+    (tmp_path / "skills").mkdir()
+    (tmp_path / "skills" / "grabbed.md").write_text(
+        "---\nname: grabbed-skill\ndescription: A skill grabbed from the wild.\n---\nDo the thing.\n")
+    b = compile_agent(load_package(tmp_path))
+    entry = b["skill_library"]["grabbed-skill"]  # id falls back to name
+    assert entry["description"] == "A skill grabbed from the wild."
+    assert "x_description" not in entry  # description is a known field, not extra

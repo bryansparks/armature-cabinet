@@ -24,6 +24,7 @@ class Skill:
     id: str
     body: str
     name: str | None = None
+    description: str | None = None
     when: str | None = None
     tools: list[str] = field(default_factory=list)
     context: list[str] = field(default_factory=list)
