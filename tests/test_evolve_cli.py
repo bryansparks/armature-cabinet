@@ -147,6 +147,35 @@ def test_review_flag_forces_review_even_when_surface_is_auto(tmp_path: Path, mon
 
 
 # ---------------------------------------------------------------------------
+# Regression: bare default (no --apply, no --review) must NOT apply — safe-by-default.
+# ---------------------------------------------------------------------------
+
+
+def test_default_cycle_does_not_apply_without_apply_flag(tmp_path: Path, monkeypatch):
+    """Bare `cabinet evolve <folder>` (no --apply, no --review) on an auto surface
+    (skills) must emit a .pending patch and leave the live skill file unchanged.
+
+    This is the safe-by-default posture: --apply is the trigger to auto-apply;
+    without it, even an auto-gate surface proposes only.
+    """
+    _make_agent(tmp_path)
+    db = tmp_path / "traces.db"
+    _seed_traces(db)  # 6 traces -> R1 fires -> surface=skills -> gate=auto
+    monkeypatch.setenv("ARMATURE_CABINET_LLM_STUB", "1")
+    res = run_evolve_cycle(
+        tmp_path, traces_db=db, skill_tools={"triage": ["github:alerts"]},
+        apply=False, review=False,
+    )
+    assert res.gate == "review"
+    assert res.applied is False
+    # a .pending patch exists under versions/
+    pending = list((tmp_path / "versions").rglob(".pending.patch"))
+    assert len(pending) == 1
+    # live file untouched
+    assert "old" in (tmp_path / "skills" / "triage.md").read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
 # Cross-task requirement #2: FileProposal.evidence populated with row ids
 # ---------------------------------------------------------------------------
 

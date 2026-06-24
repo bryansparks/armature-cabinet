@@ -104,8 +104,10 @@ def _propose_and_apply(folder: Path, decision, summary, *, agent_version: str,
     # Cross-task #2: attach the trace row ids as evidence.
     proposal.evidence = summary.evidence_row_ids
 
-    # --review (or a routed review gate) forces .pending only — never apply.
-    if gate == "review" or review:
+    # Safe-by-default: emit .pending unless --apply is set. --review (or a routed
+    # review gate) also forces .pending only — never apply. Without --apply, even
+    # an auto-gate surface must NOT modify live files.
+    if gate == "review" or review or not apply:
         vdir = folder / "versions" / _bump_version(agent_version)
         vdir.mkdir(parents=True, exist_ok=True)
         (vdir / ".pending.patch").write_text(
@@ -151,9 +153,6 @@ def run_evolve_cycle(folder: Path, *, traces_db: Path,
     if summary is None:
         return CycleResult("none", None, "none", False,
                            rationale=f"insufficient traces (need >= {MIN_TRACES})")
-    if summary.n_traces < MIN_TRACES:
-        return CycleResult("none", None, "none", False,
-                           rationale=f"insufficient traces: {summary.n_traces} < {MIN_TRACES}")
 
     # Load routing rules once — used by route() and for hqs_promote_min.
     rules = load_rules()
