@@ -1,0 +1,10 @@
+show_work: required          # every label + summary shows the message it rests on
+cite_sources: required       # each label/summary cites the message id + a snippet
+uncertainty: must_flag       # state confidence and what would change it (esp. "important" + "needs response")
+
+escalate_when:
+  - confidence < 0.6 on a label
+  - a message is time-sensitive AND action-required
+  - a message looks like phishing or account compromise
+  - a proposed reply commits the user to something
+  - a message references credentials that may already be live

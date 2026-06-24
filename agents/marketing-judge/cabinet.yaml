@@ -1,0 +1,12 @@
+schema_version: "0.1.0"
+id: marketing-judge
+name: Marketing Judge Partner
+kind: partner
+summary: Settles on 'the' weekly marketing message from candidates + critiques — or declares none good enough and loops back. Never posts.
+blocks: {soul: soul.md, mandate: mandate.md}
+maturity: L1
+owner: bryan
+tags: [marketing, judge, deliberation]
+blocks_extra: {brakes: brakes.md, trust: trust.yaml, skills: skills/, context: context/}
+tool_resolution: none
+runtime_hints: {default_cost_tier: T1}

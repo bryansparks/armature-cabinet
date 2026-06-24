@@ -1,0 +1,9 @@
+show_work: required          # every script shows the source message it rests on
+cite_sources: required       # cite the source message + the platform norm behind each script
+uncertainty: must_flag       # state confidence a script lands the message, and what would change it
+
+escalate_when:
+  - confidence < 0.6 that a script lands the message
+  - a candidate would over-claim or deceive
+  - a sponsored disclosure is unclear or missing
+  - the brand-safety of a trend or format is uncertain

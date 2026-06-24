@@ -1,0 +1,25 @@
+schema_version: "0.1.0"
+
+id: blog-writer
+name: Short Blog Writer Partner
+kind: partner
+summary: Turns a marketing message into a short blog post entry for an unspecified blog — elaborates the message without fabricating beyond it. Doesn't publish.
+blocks:
+  soul: soul.md
+  mandate: mandate.md
+
+maturity: L1
+owner: bryan
+tags: [marketing, blog, writing]
+
+blocks_extra:
+  brakes: brakes.md
+  trust: trust.yaml
+  skills: skills/
+  context: context/
+
+# Pure writing — no external tools.
+tool_resolution: none
+
+runtime_hints:
+  default_cost_tier: T1

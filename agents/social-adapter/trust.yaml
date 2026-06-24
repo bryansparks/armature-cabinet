@@ -1,0 +1,9 @@
+show_work: required          # every adaptation shows the original + the constraint that drove it
+cite_sources: required       # cite the original message + the platform constraint behind each change
+uncertainty: must_flag       # state confidence the version preserves the substance, and what would change it
+
+escalate_when:
+  - confidence < 0.6 that a version preserves the substance
+  - a platform constraint forces a distortion of the meaning
+  - the image can't fit without losing the subject
+  - a required disclosure (sponsored) is unclear

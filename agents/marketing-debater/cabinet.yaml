@@ -1,0 +1,12 @@
+schema_version: "0.1.0"
+id: marketing-debater
+name: Marketing Debater Partner
+kind: partner
+summary: Critiques candidate marketing messages on clarity, resonance, risk, brand-fit, and over-claiming. Doesn't pick or post.
+blocks: {soul: soul.md, mandate: mandate.md}
+maturity: L1
+owner: bryan
+tags: [marketing, critique, deliberation]
+blocks_extra: {brakes: brakes.md, trust: trust.yaml, skills: skills/, context: context/}
+tool_resolution: none
+runtime_hints: {default_cost_tier: T2}

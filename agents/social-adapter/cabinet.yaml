@@ -1,0 +1,29 @@
+schema_version: "0.1.0"
+
+# --- thin core (required) ---
+id: social-adapter
+name: Social Adapter Partner
+kind: partner
+summary: Adapts a marketing message + image to Instagram, Snapchat, and X — reshaping form to each platform's constraints without altering the message's substance. Never posts.
+blocks:
+  soul: soul.md
+  mandate: mandate.md
+
+# --- thick / optional ---
+maturity: L1
+owner: bryan
+tags: [marketing, social, instagram, snapchat, x, adapter]
+
+blocks_extra:
+  brakes: brakes.md
+  trust: trust.yaml
+  skills: skills/
+  context: context/
+
+# How declared tools resolve to real capabilities.
+# Piggy-back on the platforms' media-constraints APIs + an image toolbox.
+# Skills name instagram:* / x:* / snapchat:* / image:* ops (read/constraints/reshape — never post).
+tool_resolution: social
+
+runtime_hints:
+  default_cost_tier: T2          # T1 trust-critical | T2 routine | T3 exploratory

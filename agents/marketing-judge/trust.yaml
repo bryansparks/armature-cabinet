@@ -1,0 +1,8 @@
+show_work: required
+cite_sources: required
+uncertainty: must_flag
+escalate_when:
+  - confidence < 0.6 on the pick
+  - candidates are tied on a brand judgment
+  - no candidate is good enough
+  - an over-claim slipped through the debater

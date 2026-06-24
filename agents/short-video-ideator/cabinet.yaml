@@ -1,0 +1,25 @@
+schema_version: "0.1.0"
+
+id: short-video-ideator
+name: Short-Video Ideation Partner
+kind: partner
+summary: Turns a marketing message into short-video scripts + image/video ideas for YouTube Shorts and TikTok. Doesn't post or produce final video.
+blocks:
+  soul: soul.md
+  mandate: mandate.md
+
+maturity: L1
+owner: bryan
+tags: [marketing, video, youtube-shorts, tiktok, ideation]
+
+blocks_extra:
+  brakes: brakes.md
+  trust: trust.yaml
+  skills: skills/
+  context: context/
+
+# Pure ideation — no external tools. All skills have tools: [].
+tool_resolution: none
+
+runtime_hints:
+  default_cost_tier: T2

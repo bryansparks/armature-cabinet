@@ -1,0 +1,28 @@
+schema_version: "0.1.0"
+
+# --- thin core (required) ---
+id: research-synthesis
+name: Research Synthesis Partner
+kind: partner
+summary: Given one or more papers/articles/posts, summarize the key points and cross-cutting themes, and frame the insights as actionable options the user can choose to act on.
+blocks:
+  soul: soul.md
+  mandate: mandate.md
+
+# --- thick / optional ---
+maturity: L1
+owner: bryan
+tags: [research, synthesis, reading, papers, distillation]
+
+blocks_extra:
+  brakes: brakes.md
+  trust: trust.yaml
+  skills: skills/
+  context: context/
+
+# How declared tools resolve to real capabilities.
+# Fetch + read sources the user supplies (URLs, PDFs, X posts). No submit/post/pay.
+tool_resolution: web
+
+runtime_hints:
+  default_cost_tier: T2          # T1 trust-critical | T2 routine | T3 exploratory

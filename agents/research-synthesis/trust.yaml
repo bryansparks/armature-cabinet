@@ -1,0 +1,10 @@
+show_work: required          # every key point shows the source + the claim it rests on
+cite_sources: required       # cite the paper/article/post + the passage or claim
+uncertainty: must_flag       # state confidence and what would change it (esp. themes + actions)
+
+escalate_when:
+  - confidence < 0.6 on a key point or theme
+  - a source is paywalled or unauthorized
+  - sources contradict sharply enough to mislead
+  - an actionable option requires a user decision or commitment
+  - a claim can't be traced to a passage (possible fabrication)

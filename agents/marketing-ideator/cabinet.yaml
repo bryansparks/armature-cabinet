@@ -1,0 +1,12 @@
+schema_version: "0.1.0"
+id: marketing-ideator
+name: Marketing Ideator Partner
+kind: partner
+summary: Generates 3+ candidate weekly marketing messages from a short description/seed. Doesn't post or pick.
+blocks: {soul: soul.md, mandate: mandate.md}
+maturity: L1
+owner: bryan
+tags: [marketing, ideation, deliberation]
+blocks_extra: {brakes: brakes.md, trust: trust.yaml, skills: skills/, context: context/}
+tool_resolution: none
+runtime_hints: {default_cost_tier: T2}

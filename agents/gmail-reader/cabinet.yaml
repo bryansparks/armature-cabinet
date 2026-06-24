@@ -1,0 +1,29 @@
+schema_version: "0.1.0"
+
+# --- thin core (required) ---
+id: gmail-reader
+name: Gmail Reader Partner
+kind: partner
+summary: Reads, categorizes, and labels Gmail messages; summarizes the important ones; drafts proposed replies for those needing a response. Never sends.
+blocks:
+  soul: soul.md
+  mandate: mandate.md
+
+# --- thick / optional ---
+maturity: L1
+owner: bryan
+tags: [email, gmail, triage, productivity]
+
+blocks_extra:
+  brakes: brakes.md
+  trust: trust.yaml
+  skills: skills/
+  context: context/
+
+# How declared tools resolve to real capabilities.
+# Piggy-back on the Gmail API — the org's existing OAuth/token is the adapter.
+# Skills name gmail:* operations (read, label, draft — never send/delete).
+tool_resolution: gmail
+
+runtime_hints:
+  default_cost_tier: T2          # T1 trust-critical | T2 routine | T3 exploratory

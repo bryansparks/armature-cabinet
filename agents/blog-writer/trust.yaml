@@ -1,0 +1,9 @@
+show_work: required          # every claim shows the source message it rests on
+cite_sources: required       # cite the source message behind each claim
+uncertainty: must_flag       # state confidence a claim is supported, and what would change it
+
+escalate_when:
+  - confidence < 0.6 that a claim is supported by the message
+  - a benefit or quote would be fabricated
+  - the voice or audience is ambiguous
+  - the message self-contradicts
