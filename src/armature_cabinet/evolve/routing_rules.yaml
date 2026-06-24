@@ -1,4 +1,3 @@
-# src/armature_cabinet/evolve/routing_rules.yaml
 # v1 routing table. The router is data-driven: thresholds and which surfaces are
 # review-locked can be tuned here without touching router.py.
 min_observations: 3            # a symptom must appear this many times to fire
