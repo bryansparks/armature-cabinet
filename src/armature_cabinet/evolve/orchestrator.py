@@ -35,14 +35,49 @@ MIN_TRACES = 5
 
 
 def _stub_llm(system: str, user: str) -> str:
-    """Minimal safe patch: replace the first '## ' section body with a tightened note.
+    """Minimal safe patch: replace the first section of the target file body with a
+    tightened output contract.
 
     Deterministic and network-free so tests never need a live LLM.
+
+    Content-aware: the proposer passes the target file's content in the ``user``
+    prompt, so we anchor on the first real ``## `` section header — or, when the file
+    has no section headers (e.g. the real ``gmail-reader`` skills, which use a
+    numbered-list body), on the first non-empty body line. This makes the stub apply
+    cleanly to REAL agent folders, not just synthetic fixtures that happen to contain
+    a literal ``## Output`` section.
     """
+    # The proposer formats the user prompt as:
+    #   "EVIDENCE:\n...\n\nFILE (<path>):\n<content>\n"
+    file_content = ""
+    marker = "FILE ("
+    idx = user.find(marker)
+    if idx != -1:
+        nl = user.find("\n", idx)
+        if nl != -1:
+            file_content = user[nl + 1:]
+    # Strip frontmatter so we only inspect the body.
+    body = file_content
+    if body.lstrip().startswith("---"):
+        end = body.find("\n---", 3)
+        if end != -1:
+            body = body[end + 4:].lstrip("\n")
+    # Prefer a '## ' section header; fall back to the first non-empty body line.
+    anchor = "## Output"
+    for line in body.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("## "):
+            anchor = s
+            break
+        if not s.startswith("---"):
+            anchor = s
+            break
     return json.dumps({
         "rationale": "tighten output contract (stub)",
         "frontmatter_changes": {},
-        "body_changes": [{"op": "replace", "anchor": "## Output",
+        "body_changes": [{"op": "replace", "anchor": anchor,
                           "content": "## Output\nAlways produce valid JSON per the schema.\n"}],
         "predicted_fixes": ["output_invalid:stub"],
         "predicted_regressions": [],
