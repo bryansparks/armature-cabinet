@@ -36,7 +36,30 @@ security-triage/
 
 The format generalizes beyond security: two fixtures demonstrate it —
 `security-triage` (GitHub/appsec) and `incident-comms` (Slack/incident-comms) —
-both under `tests/fixtures/` and `examples/`.
+both under `tests/fixtures/` and `examples/`. Eight fuller reference agents live
+under [`agents/`](#reference-agents) — a Gmail triage partner, a research
+synthesis partner, and a three-agent marketing deliberation team with channel
+adapters.
+
+## Reference agents
+
+`agents/` ships eight agents that exercise the full format — useful as templates
+and as proof the format isn't shaped to one domain:
+
+| Agent | Kind / role type | Shows |
+|---|---|---|
+| `gmail-reader` | partner / worker | read-only Gmail triage; all-tooled skills; the safety fragment as the hard-enforcement handoff for destructive actions |
+| `research-synthesis` | partner / researcher | the `researcher` role-type override; web/pdf tools; **empty-tools** (pure-reasoning) skills |
+| `marketing-ideator` | partner / worker | generates 3+ candidate messages from a seed |
+| `marketing-debater` | partner / worker | critiques candidates on clarity, resonance, risk, brand-fit, over-claiming |
+| `marketing-judge` | partner / judge | settles on one message, or declares none good enough and loops back |
+| `social-adapter` | partner / worker | adapts a message to Instagram, Snapchat, X without altering substance |
+| `blog-writer` | partner / worker | turns a message into a short blog post |
+| `short-video-ideator` | partner / worker | Shorts/TikTok scripts + shot ideas |
+
+The three marketing agents form a reusable **deliberation team**
+(ideator → debater → judge). Every agent is `partner` kind — they recommend; they
+never post or send. `armature-cabinet build agents --all` compiles the lot.
 
 ## Build
 
@@ -146,3 +169,28 @@ ruff check src tests
 
 CI (lint / test / build) runs on every push and PR — see the [actions](https://github.com/bryansparks/armature-cabinet/actions).
 For authoring an agent, see [writing a cabinet agent](docs/writing-a-cabinet-agent.md).
+
+## Documentation
+
+- [Into Armature Agents](docs/INTRO-ARMATURE-AGENTS.md) — what a cabinet agent
+  *is*: the soul, mandate, brakes, trust, skills, and context, and why each is
+  more than a prompt. Read this first.
+- [Agent vs. Workflow](docs/AGENT-VS-WORKFLOW.md) — where an agent definition
+  ends and an Armature workflow begins; orchestrators, subagents, and
+  cadence-triggered vs. event-triggered teams.
+- [Writing a cabinet agent](docs/writing-a-cabinet-agent.md) — the full
+  field-by-field authoring guide, validation rules, and CLI reference.
+- [System overview](docs/armature-cabinet.md) — the compile boundary, the CLI,
+  the author → library → team → run loop, and how a UI maps onto it.
+
+## Status
+
+Early / experimental (`0.1.0`). The compiler core is stable — unchanged since the
+M3 milestone, 76 tests, ruff-clean, and it round-trips through real
+`armature 0.3.5` end-to-end. The authoring surfaces (the `new` wizard, library
+`list`/`build --all`, and `team` generation) are newer. Reference agents are
+`maturity: L1`. See [`NEXT-STEPS.md`](NEXT-STEPS.md) for what's deferred.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
