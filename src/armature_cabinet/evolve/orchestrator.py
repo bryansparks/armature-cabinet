@@ -368,6 +368,10 @@ def _maybe_rollback(folder, result, decision, *, current_hqs, new_hqs,
     if new_hqs >= current_hqs:
         return  # not a regression (gate blocked for another reason)
     drop = current_hqs - new_hqs
+    # Defense-in-depth, currently unreachable: invariant #2 hard-locks guardrail
+    # surfaces to gate="review" -> applied=False, so _maybe_rollback returns at
+    # its first guard before reaching here. auto_rollback_guardrail is a forward
+    # safety net against a future code path that might apply guardrail patches.
     is_guardrail = decision.surface == "guardrail"
     if (is_guardrail and auto_rollback_guardrail) or (not is_guardrail and drop >= rollback_threshold):
         evolve_rollback(folder, prior_latest)
