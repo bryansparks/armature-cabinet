@@ -467,3 +467,61 @@ def test_no_modeled_symptom_returns_none(tmp_path: Path, monkeypatch):
     )
     assert res.gate == "none"
     assert res.applied is False
+
+
+# ---------------------------------------------------------------------------
+# Task 6: history wiring, auto-verify, single load_package, missed_predictions
+# ---------------------------------------------------------------------------
+
+
+def test_cycle_appends_history_and_verifies_prior(tmp_path: Path, monkeypatch):
+    """A cycle appends a record to .evolve/history.jsonl, and on a second cycle
+    the PRIOR record's predicted_fixes are verified and annotated."""
+    from armature_cabinet.evolve import cycle_history
+    _make_agent(tmp_path)
+    db = tmp_path / "traces.db"
+    _seed_traces(db, agent_version="0.1.1")
+    monkeypatch.setenv("ARMATURE_CABINET_LLM_STUB", "1")
+
+    # Seed a prior cycle in history so cycle 2 has something to verify.
+    cycle_history.append_record(tmp_path, {
+        "cycle": 1, "proposed_file": "skills/triage.md", "gate": "auto",
+        "surface": "skills", "hqs_before": 0.4, "hqs_after": 0.4,
+        "predicted_fixes": ["output_invalid:triage"], "predicted_regressions": [],
+        "verified": {}, "version": "0.1.1", "rolled_back": False,
+    })
+
+    res = run_evolve_cycle(
+        tmp_path, traces_db=db, skill_tools={"triage": ["github:alerts"]},
+        apply=True, current_version="0.1.1",
+    )
+    assert res.applied is True
+
+    h = cycle_history.read_history(tmp_path)
+    assert len(h) == 2
+    assert h[-1]["cycle"] == 2
+    # The prior (cycle 1) record was annotated with a verdict.
+    assert h[0]["verified"]["verdict"] in {"fixed", "unfixed", "regressed"}
+    # Structured missed_predictions is a list of dicts.
+    assert isinstance(res.missed_predictions, list)
+
+
+def test_cycle_single_load_package(tmp_path: Path, monkeypatch):
+    """load_package is called once per cycle (v1 called it twice)."""
+    from armature_cabinet.evolve import orchestrator as orch
+    _make_agent(tmp_path)
+    db = tmp_path / "traces.db"
+    _seed_traces(db)
+    monkeypatch.setenv("ARMATURE_CABINET_LLM_STUB", "1")
+    calls = {"n": 0}
+    real = orch.load_package
+
+    def _count(folder):
+        calls["n"] += 1
+        return real(folder)
+
+    monkeypatch.setattr(orch, "load_package", _count)
+    run_evolve_cycle(
+        tmp_path, traces_db=db, skill_tools={"triage": ["github:alerts"]}, apply=True,
+    )
+    assert calls["n"] == 1
