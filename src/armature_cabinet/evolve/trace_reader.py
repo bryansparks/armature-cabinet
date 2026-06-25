@@ -19,6 +19,8 @@ DEFAULT_DB = Path.home() / ".armature" / "traces.db"
 _SYM_INVALID = "OUTPUT_INVALID"
 _SYM_REFUSAL = "REFUSAL_OR_FALSE_HALT"
 _SYM_LOW_SKILL = "LOW_SKILL_ACTIVATION"
+_SYM_LATENCY = "HIGH_LATENCY"
+_SYM_COST = "HIGH_COST"
 
 
 def _has_column(con: sqlite3.Connection, col: str) -> bool:
@@ -28,7 +30,9 @@ def _has_column(con: sqlite3.Connection, col: str) -> bool:
 
 def read_summary(db_path: Path | str, *, agent_id: str, agent_version: str | None,
                  skill_tools: dict[str, list[str]] | None = None,
-                 min_traces: int = 1) -> AgentTraceSummary | None:
+                 min_traces: int = 1,
+                 latency_threshold_ms: float = 3000.0,
+                 cost_threshold_tokens: float = 8000.0) -> AgentTraceSummary | None:
     skill_tools = skill_tools or {}
     con = sqlite3.connect(str(db_path))
     con.row_factory = sqlite3.Row
@@ -72,6 +76,15 @@ def read_summary(db_path: Path | str, *, agent_id: str, agent_version: str | Non
         if r["quorum_score"] is not None:
             quorums.append(float(r["quorum_score"]))
         latencies.append(float(r["latency_ms"] or 0.0))
+
+        # v2: per-row latency/cost symptoms (one observation per offending row).
+        lat = float(r["latency_ms"] or 0.0) if "latency_ms" in r.keys() else 0.0
+        if lat > latency_threshold_ms:
+            symptom_counts[_SYM_LATENCY] = symptom_counts.get(_SYM_LATENCY, 0) + 1
+        if "input_tokens" in r.keys() and "output_tokens" in r.keys():
+            tokens = int(r["input_tokens"] or 0) + int(r["output_tokens"] or 0)
+            if tokens > cost_threshold_tokens:
+                symptom_counts[_SYM_COST] = symptom_counts.get(_SYM_COST, 0) + 1
 
         tools_called = json.loads(r["tools_called_json"] or "[]")
         active = json.loads(r["active_skill_ids_json"] or "[]") if enriched else []
