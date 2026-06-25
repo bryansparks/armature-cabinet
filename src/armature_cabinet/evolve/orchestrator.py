@@ -26,11 +26,12 @@ from .surface_gate import decide_gate
 from .trace_reader import read_summary
 from .proposer import propose_edit
 from .patch_applier import apply_patch_to_folder, PatchReject
-from .versioning import write_version, promote, ThresholdPromotionPolicy
+from .versioning import (write_version, promote, ThresholdPromotionPolicy,
+                         rollback as evolve_rollback, read_latest)
 from .lora_handoff import handoff_to_adapter
 from .types import FileProposal
-from .cycle_history import (read_history, append_record,
-                            prose_cycles_without_gain, update_last_verified)
+from .cycle_history import (read_history, append_record, prose_cycles_without_gain,
+                            update_last_verified, detect_oscillation)
 from .verifier import verify_prior
 
 # Design spec: an agent needs at least this many traces before we will propose.
@@ -189,7 +190,10 @@ def run_evolve_cycle(folder: Path, *, traces_db: Path,
                      current_version: str | None = None,
                      current_hqs: float | None = None,
                      history: list[dict] | None = None,
-                     prose_cycles_without_gain_arg: int | None = None
+                     prose_cycles_without_gain_arg: int | None = None,
+                     rollback_threshold: float = 0.05,
+                     auto_rollback_guardrail: bool = True,
+                     oscillating: bool | None = None,
                      ) -> CycleResult:
     """Run one evolve cycle. Returns a CycleResult describing what happened.
 
@@ -206,6 +210,8 @@ def run_evolve_cycle(folder: Path, *, traces_db: Path,
     prose_cycles = (prose_cycles_without_gain_arg
                     if prose_cycles_without_gain_arg is not None
                     else prose_cycles_without_gain(history_records))
+    is_oscillating = oscillating if oscillating is not None else detect_oscillation(history_records)
+    prior_latest = read_latest(folder)
 
     summary = read_summary(traces_db, agent_id=agent_id, agent_version=agent_version,
                            skill_tools=skill_tools, min_traces=MIN_TRACES)
@@ -253,11 +259,19 @@ def run_evolve_cycle(folder: Path, *, traces_db: Path,
         )
         result.missed_predictions = missed_predictions
         result.verified = prior_verdict
+        _maybe_rollback(folder, result, decision,
+                        current_hqs=current_hqs, new_hqs=summary.hqs,
+                        rollback_threshold=rollback_threshold,
+                        auto_rollback_guardrail=auto_rollback_guardrail,
+                        prior_latest=prior_latest)
         _append_cycle_record(folder, decision, summary, result, history_records,
                              prose_cycles, current_hqs)
         return result
 
-    gate = decide_gate(decision, force_apply=apply)
+    if is_oscillating:
+        gate = "review"   # stop auto-promoting a thrashing agent
+    else:
+        gate = decide_gate(decision, force_apply=apply)
     if decision.target_file is None or gate == "none":
         result = CycleResult(decision.rule_id, None, "none", False,
                              rationale=decision.rationale,
@@ -271,6 +285,11 @@ def run_evolve_cycle(folder: Path, *, traces_db: Path,
         gate=gate, review=review, apply=apply,
         current_hqs=current_hqs, hqs_promote_min=hqs_promote_min, pkg=pkg,
     )
+    _maybe_rollback(folder, result, decision,
+                    current_hqs=current_hqs, new_hqs=summary.hqs,
+                    rollback_threshold=rollback_threshold,
+                    auto_rollback_guardrail=auto_rollback_guardrail,
+                    prior_latest=prior_latest)
     result.missed_predictions = missed_predictions
     result.verified = prior_verdict
     _append_cycle_record(folder, decision, summary, result, history_records,
@@ -317,3 +336,33 @@ def _prose_fallback(folder: Path, decision, summary, *, agent_version: str,
         result.rationale = (f"lora handoff under-threshold; fell back to prose. "
                             f"missed_predictions logged. {result.rationale}")
     return result
+
+
+def _maybe_rollback(folder, result, decision, *, current_hqs, new_hqs,
+                    rollback_threshold, auto_rollback_guardrail, prior_latest) -> None:
+    """If --apply patched the live folder but the HQS gate blocked promotion (a
+    regression), restore the live folder to prior_latest.
+
+    Guardrail-touched regressions: restore unconditionally (auto_rollback_guardrail).
+    Non-guardrail regressions: restore only when drop >= rollback_threshold; a
+    sub-threshold drop is left as a 'trial' on the live folder (latest unchanged)
+    so a minor regression gets a next-cycle chance to prove out.
+    Mutates `result` (rationale, rolled_back). Does NOT change latest (the gate
+    already refused to advance it).
+    """
+    if not result.applied or result.promoted or prior_latest is None:
+        return
+    if current_hqs is None or new_hqs is None:
+        return
+    if new_hqs >= current_hqs:
+        return  # not a regression (gate blocked for another reason)
+    drop = current_hqs - new_hqs
+    is_guardrail = decision.surface == "guardrail"
+    if (is_guardrail and auto_rollback_guardrail) or (not is_guardrail and drop >= rollback_threshold):
+        evolve_rollback(folder, prior_latest)
+        why = "guardrail regression" if is_guardrail else f"drop {drop:.3f} >= {rollback_threshold}"
+        result.rationale = f"rolled back live folder to {prior_latest} ({why}). {result.rationale}"
+        result.rolled_back = True
+    else:
+        result.rationale = (f"regression {drop:.3f} < threshold {rollback_threshold}; "
+                            f"left as trial on live folder (latest unchanged). {result.rationale}")

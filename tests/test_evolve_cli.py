@@ -525,3 +525,92 @@ def test_cycle_single_load_package(tmp_path: Path, monkeypatch):
         tmp_path, traces_db=db, skill_tools={"triage": ["github:alerts"]}, apply=True,
     )
     assert calls["n"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 7: auto-rollback (trial semantics) + oscillation-forces-review
+# ---------------------------------------------------------------------------
+
+def test_non_guardrail_regression_above_threshold_rolls_back(tmp_path: Path, monkeypatch):
+    """--apply patched the live folder but the HQS gate blocked promotion (regression
+    ~0.20 >= 0.05) -> restore the live folder to prior_latest; rolled_back True."""
+    from armature_cabinet.evolve import cycle_history
+    from armature_cabinet.evolve.versioning import (
+        read_latest, write_version, promote, ThresholdPromotionPolicy,
+    )
+    _make_agent(tmp_path)
+    db = tmp_path / "traces.db"
+    _seed_traces(db, output_valid_fail=6)  # all fail -> HQS ~0.30, routes R1 skills/triage.md
+    monkeypatch.setenv("ARMATURE_CABINET_LLM_STUB", "1")
+
+    # Baseline promoted version at HQS 0.5 (so the cycle's 0.30 is a 0.20 drop).
+    write_version(tmp_path, version="0.1.0", hqs=0.5, predicted_fixes=[])
+    promote(tmp_path, "0.1.0", policy=ThresholdPromotionPolicy(min_gain=0.02),
+            current_hqs=None, new_hqs=0.5)
+    original_skill = (tmp_path / "skills" / "triage.md").read_text(encoding="utf-8")
+
+    res = run_evolve_cycle(
+        tmp_path, traces_db=db, skill_tools={"triage": ["github:alerts"]},
+        apply=True, current_version="0.1.0", current_hqs=0.5,
+        rollback_threshold=0.05,
+    )
+    assert res.applied is True and res.promoted is False   # gate blocked, patch was applied
+    assert res.rolled_back is True
+    # Live folder restored to the baseline; latest still 0.1.0.
+    assert read_latest(tmp_path) == "0.1.0"
+    assert (tmp_path / "skills" / "triage.md").read_text(encoding="utf-8") == original_skill
+    h = cycle_history.read_history(tmp_path)
+    assert h[-1]["rolled_back"] is True
+
+
+def test_non_guardrail_regression_below_threshold_left_as_trial(tmp_path: Path, monkeypatch):
+    """A sub-threshold drop (0.02 < 0.05) is left as a trial on the live folder:
+    the patch stays applied, latest is unchanged, rolled_back False."""
+    from armature_cabinet.evolve import cycle_history
+    from armature_cabinet.evolve.versioning import (
+        read_latest, write_version, promote, ThresholdPromotionPolicy,
+    )
+    _make_agent(tmp_path)
+    db = tmp_path / "traces.db"
+    _seed_traces(db, output_valid_fail=6)  # HQS ~0.30
+    monkeypatch.setenv("ARMATURE_CABINET_LLM_STUB", "1")
+
+    # Baseline at 0.32 so the 0.30 cycle is only a 0.02 drop (< 0.05 threshold).
+    write_version(tmp_path, version="0.1.0", hqs=0.32, predicted_fixes=[])
+    promote(tmp_path, "0.1.0", policy=ThresholdPromotionPolicy(), current_hqs=None, new_hqs=0.32)
+
+    res = run_evolve_cycle(
+        tmp_path, traces_db=db, skill_tools={"triage": ["github:alerts"]},
+        apply=True, current_version="0.1.0", current_hqs=0.32,
+        rollback_threshold=0.05,
+    )
+    assert res.applied is True and res.promoted is False
+    assert res.rolled_back is False          # sub-threshold -> trial, not restored
+    assert read_latest(tmp_path) == "0.1.0"  # latest unchanged
+    # The trial patch remains on the live folder.
+    assert "valid JSON" in (tmp_path / "skills" / "triage.md").read_text(encoding="utf-8")
+    h = cycle_history.read_history(tmp_path)
+    assert h[-1]["rolled_back"] is False
+
+
+def test_oscillation_forces_review(tmp_path: Path, monkeypatch):
+    """When history oscillates, the cycle gate is forced to review (no auto-apply)."""
+    from armature_cabinet.evolve import cycle_history
+    _make_agent(tmp_path)
+    db = tmp_path / "traces.db"
+    _seed_traces(db)
+    monkeypatch.setenv("ARMATURE_CABINET_LLM_STUB", "1")
+    # +, -, + deltas -> oscillating.
+    for after in (0.6, 0.4, 0.6):
+        cycle_history.append_record(tmp_path, {
+            "cycle": 0, "proposed_file": "skills/triage.md", "gate": "auto",
+            "surface": "skills", "hqs_before": 0.5, "hqs_after": after,
+            "predicted_fixes": [], "predicted_regressions": [], "verified": {},
+            "version": "0.1.0", "rolled_back": False,
+        })
+    res = run_evolve_cycle(
+        tmp_path, traces_db=db, skill_tools={"triage": ["github:alerts"]},
+        apply=True, current_version="0.1.0",
+    )
+    assert res.gate == "review"
+    assert res.applied is False
