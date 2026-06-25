@@ -3,9 +3,19 @@
 **How Armature's self-improvement extends beyond prompt edits to richly-defined Cabinet
 agents — and why that combination is uncommon.**
 
-**Date:** 2026-06-24
-**Companion spec:** `docs/superpowers/specs/2026-06-24-cabinet-evolve-design.md` (the
-technical `evolve` surface)
+**Date:** 2026-06-24 (rationale); **implemented 2026-06-25** (v1 + v2 "denser + automatic loop")
+**Companion spec:** `docs/superpowers/specs/2026-06-24-cabinet-evolve-design.md` (v1) and
+`docs/superpowers/specs/2026-06-25-cabinet-evolve-denser-loop-design.md` (v2)
+**How it actually works (now implemented):** `docs/EVOLVE-LOOP.md` — the operational +
+architectural reference for the shipped loop.
+
+> **Status note (2026-06-25):** the loop described here is **implemented and merged to `main`**.
+> This document remains the *rationale* ("why this design, why it's uncommon"). It was written
+> before v1 was built, so a few claims below were **aspirational when written** — most notably §6.2's
+> "the next cycle verifies [predictions]… detects oscillation… no check is silent," which v1 carried
+> as a promise and **v2 delivered as a mechanism** (the `.evolve/history.jsonl` sidecar +
+> `verify_prior` + `detect_oscillation` + auto-rollback). Those are flagged inline. For the
+> cycle-by-cycle mechanics, the routing table, the dials, and how to run it, read `EVOLVE-LOOP.md`.
 
 ---
 
@@ -86,7 +96,11 @@ but by editing the **right file** in the richer definition.
 
 ## 5. The design: `cabinet evolve`
 
-(Full technical detail in the companion spec. Summary here.)
+(Full technical detail in the companion spec. Summary here. The **implemented** loop is denser than
+this v1 sketch — it adds a per-cycle `.evolve/history.jsonl` sidecar, an auto-`verify_prior` step
+that annotates the prior record, atomic version writes, trial-semantics auto-rollback,
+oscillation-forced-review, two new latency/cost routes (R4/R5 → `cabinet.yaml`), and a live LoRA
+handoff driven by `decide_lora`. See `docs/EVOLVE-LOOP.md` for the cycle as it actually runs.)
 
 A new Cabinet surface — `cabinet evolve <agent-id>` — closes a loop across both repos,
 preserving the one-directional boundary:
@@ -123,6 +137,12 @@ Three properties rarely co-occur in "self-improving agent" systems:
    a `drift_score` that detects oscillation. Versions promote only on measured HQS gain.
    No edit ships without a later check; no check is silent.
 
+   *(Aspirational when written 2026-06-24; **delivered by v2 (2026-06-25)**. v1 carried predictions
+   but never checked them and its `drift_score` was a 2-point HQS-drop. v2 adds `verify_prior`
+   — which annotates the prior record with `fixed`/`unfixed`/`regressed` — and a separate
+   `detect_oscillation` over the last 3 cycles' HQS-delta signs. The single-cycle `drift_score`
+   remains HQS-drop; multi-cycle oscillation is the 3-state detector. See `EVOLVE-LOOP.md` §3, §7.)*
+
 3. **Multi-substrate, by design.** Text edits (cheap, interpretable, reversible) and LoRA
    weight edits (tacit patterns text can't express) are two complementary remediation
    paths *for the same agent*, gated by the same router and governed by the same
@@ -151,8 +171,16 @@ that line clean is what lets a stateless, reproducible agent also be a self-impr
 | LoRA scope | Decide-in-evolve, train-via-CLI | Recommend-only (loop not closed); train inside evolve (breaks one-directional boundary) |
 | Routing architecture | Deterministic router + sandboxed LLM proposer | LLM-routed meta-harness (LLM picks the target file → no safety boundary); pure heuristic (too blunt to deliver the promise) |
 | v1 coverage | 2 prose routes + 2 locked guardrails | Full 8-route table (ships routes we can't yet validate); 3-route set (defers guardrails, which is where safety gating matters most) |
+| v2 routes (added 2026-06-25) | + R4 `HIGH_LATENCY` / R5 `HIGH_COST` → `cabinet.yaml` (surface: `config`) | voice-drift → `soul.md`, scope-creep → `mandate.md` (no clean trace signal — fuzzy detector work, deferred) |
 
 ## 9. Predicted improvements
+
+> **Update (2026-06-25):** these were predictions written before v1 ran. The falsifiable contract
+> itself is now **implemented** (`verify_prior` + the `.evolve/history.jsonl` sidecar), so the
+> "predicted vs. observed" comparison the section below describes is a live mechanism, not a hope.
+> The latency/cost routes (R4/R5) are also in. What remains future work is *field measurement*
+> against real workflows — the predictions below are now measurable in principle, with the loop
+> running.
 
 What the loop should produce, concretely, once v1 runs against real workflows:
 
@@ -175,6 +203,12 @@ that is the system telling us the routing table is wrong — and the table is da
 fix is a policy edit, not a code change.
 
 ## 10. Prerequisites and sequencing
+
+> **Update (2026-06-25):** all four prerequisites are **complete and merged to `main`** —
+> richness-metadata carry-through, cross-repo trace enrichment (`agent_id` / `agent_version` /
+> `active_skill_id(s)` on `TraceRecord`), the per-agent `version:` field, and the `evolve` surface
+> itself (v1 routes + the v2 denser loop). This section is retained as historical context for the
+> sequencing decision.
 
 1. **Richness-metadata carry-through** (NEXT-STEPS #1) — emit `cabinet.yaml`'s
    `summary`/`maturity`/`owner`/`tags`/`runtime_hints` as `x_*` in the bundle. Hard
