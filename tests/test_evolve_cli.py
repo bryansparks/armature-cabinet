@@ -311,21 +311,31 @@ def test_promote_manually_advances_latest(tmp_path: Path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+def _seed_two_flat_prose_cycles(folder):
+    """Two trailing prose cycles with no HQS gain -> prose_cycles_without_gain == 2."""
+    from armature_cabinet.evolve import cycle_history
+    for _ in range(2):
+        cycle_history.append_record(folder, {
+            "cycle": 0, "proposed_file": "skills/triage.md", "gate": "auto",
+            "surface": "skills", "hqs_before": 0.4, "hqs_after": 0.4,
+            "predicted_fixes": [], "predicted_regressions": [], "verified": {},
+            "version": "0.1.0", "rolled_back": False,
+        })
+
+
 def test_lora_eligible_falls_back_to_prose_when_not_trained(tmp_path: Path, monkeypatch):
-    """When surface=lora_eligible and handoff.trained is False, fall back to prose
-    and log missed_predictions."""
-    from armature_cabinet.evolve.types import (
-        AgentTraceSummary, RoutingDecision, SkillStats,
-    )
+    """decide_lora eligible (prose exhausted, tools fired) but handoff not trained
+    -> fall back to prose and log missed_predictions."""
+    from armature_cabinet.evolve.types import AgentTraceSummary, SkillStats
     from armature_cabinet.evolve import orchestrator as orch
     from armature_cabinet.evolve.lora_handoff import HandoffResult
 
     _make_agent(tmp_path)
     db = tmp_path / "traces.db"
     _seed_traces(db)
+    _seed_two_flat_prose_cycles(tmp_path)
     monkeypatch.setenv("ARMATURE_CABINET_LLM_STUB", "1")
 
-    # Build a synthetic summary + decision that routes to lora_eligible.
     summary = AgentTraceSummary(
         agent_id="sec", agent_version="0.1.0", n_traces=6,
         output_valid_rate=0.33, success_rate=0.33, quorum=0.5, escalation_rate=0.0,
@@ -335,40 +345,32 @@ def test_lora_eligible_falls_back_to_prose_when_not_trained(tmp_path: Path, monk
         dominant_symptoms=[("OUTPUT_INVALID", 4)],
         healthy_skills=[], evidence_row_ids=[1, 2, 3, 4, 5, 6], heuristic=False,
     )
-    decision = RoutingDecision(
-        target_file="skills/triage.md", surface="lora_eligible", gate="none",
-        rationale="prose exhausted", rule_id="L1", symptom="OUTPUT_INVALID",
-        skill_id="triage", heuristic=False,
-    )
 
-    # Stub handoff_to_adapter to return trained=False (under threshold)
     def _fake_handoff(*, skill_id, role_type, **kwargs):
         return HandoffResult(skill_id=skill_id, command=["armature"], dry_run=False,
                              returncode=1, stdout="", stderr="under threshold")
 
     monkeypatch.setattr(orch, "handoff_to_adapter", _fake_handoff)
     monkeypatch.setattr(orch, "read_summary", lambda *a, **k: summary)
-    monkeypatch.setattr(orch, "route", lambda *a, **k: decision)
+    # route returns the REAL R1 decision (skills/triage.md, skill_id=triage).
 
     res = run_evolve_cycle(
         tmp_path, traces_db=db, skill_tools={"triage": ["github:alerts"]}, apply=True,
     )
-    # Fell back to prose: applied a patch, and rationale notes the LoRA fallback.
     assert res.applied is True
     assert "lora" in res.rationale.lower() or "fallback" in res.rationale.lower()
 
 
 def test_lora_eligible_trained_does_not_prose(tmp_path: Path, monkeypatch):
-    """When surface=lora_eligible and handoff.trained is True, do NOT prose-edit."""
-    from armature_cabinet.evolve.types import (
-        AgentTraceSummary, RoutingDecision, SkillStats,
-    )
+    """decide_lora eligible and handoff trained -> do NOT prose-edit the skill file."""
+    from armature_cabinet.evolve.types import AgentTraceSummary, SkillStats
     from armature_cabinet.evolve import orchestrator as orch
     from armature_cabinet.evolve.lora_handoff import HandoffResult
 
     _make_agent(tmp_path)
     db = tmp_path / "traces.db"
     _seed_traces(db)
+    _seed_two_flat_prose_cycles(tmp_path)
     monkeypatch.setenv("ARMATURE_CABINET_LLM_STUB", "1")
 
     summary = AgentTraceSummary(
@@ -379,11 +381,6 @@ def test_lora_eligible_trained_does_not_prose(tmp_path: Path, monkeypatch):
                    tools_declared=["github:alerts"], tools_called=["github:alerts"])},
         dominant_symptoms=[("OUTPUT_INVALID", 4)],
         healthy_skills=[], evidence_row_ids=[1, 2, 3, 4, 5, 6], heuristic=False,
-    )
-    decision = RoutingDecision(
-        target_file="skills/triage.md", surface="lora_eligible", gate="none",
-        rationale="prose exhausted", rule_id="L1", symptom="OUTPUT_INVALID",
-        skill_id="triage", heuristic=False,
     )
 
     def _fake_handoff(*, skill_id, role_type, **kwargs):
@@ -392,16 +389,53 @@ def test_lora_eligible_trained_does_not_prose(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(orch, "handoff_to_adapter", _fake_handoff)
     monkeypatch.setattr(orch, "read_summary", lambda *a, **k: summary)
-    monkeypatch.setattr(orch, "route", lambda *a, **k: decision)
 
     res = run_evolve_cycle(
         tmp_path, traces_db=db, skill_tools={"triage": ["github:alerts"]}, apply=True,
     )
     assert res.applied is True
-    assert res.gate == "auto"
     assert "lora" in res.rationale.lower()
     # live skill file unchanged (no prose patch)
     assert "old" in (tmp_path / "skills" / "triage.md").read_text(encoding="utf-8")
+
+
+def test_decide_lora_called_with_real_prose_cycles(tmp_path: Path, monkeypatch):
+    """The orchestrator passes the history-derived prose_cycles_without_gain to
+    decide_lora (the v1 gap: it was only ever reached via monkeypatch)."""
+    from armature_cabinet.evolve.types import AgentTraceSummary, SkillStats
+    from armature_cabinet.evolve import orchestrator as orch
+    from armature_cabinet.evolve.lora_handoff import LoraRecommendation
+
+    _make_agent(tmp_path)
+    db = tmp_path / "traces.db"
+    _seed_traces(db)
+    _seed_two_flat_prose_cycles(tmp_path)
+    monkeypatch.setenv("ARMATURE_CABINET_LLM_STUB", "1")
+
+    summary = AgentTraceSummary(
+        agent_id="sec", agent_version="0.1.0", n_traces=6,
+        output_valid_rate=0.33, success_rate=0.33, quorum=0.5, escalation_rate=0.0,
+        hqs=0.4,
+        per_skill={"triage": SkillStats("triage", fail_count=4,
+                   tools_declared=["github:alerts"], tools_called=["github:alerts"])},
+        dominant_symptoms=[("OUTPUT_INVALID", 4)],
+        healthy_skills=[], evidence_row_ids=[1, 2, 3, 4, 5, 6], heuristic=False,
+    )
+    captured = {}
+
+    def _spy_decide(summary, *, prose_cycles_without_gain, skill_id):
+        captured["prose_cycles"] = prose_cycles_without_gain
+        captured["skill_id"] = skill_id
+        return LoraRecommendation(False, skill_id, "spy: not eligible")
+
+    monkeypatch.setattr(orch, "decide_lora", _spy_decide)
+    monkeypatch.setattr(orch, "read_summary", lambda *a, **k: summary)
+
+    run_evolve_cycle(
+        tmp_path, traces_db=db, skill_tools={"triage": ["github:alerts"]}, apply=True,
+    )
+    assert captured["prose_cycles"] == 2
+    assert captured["skill_id"] == "triage"
 
 
 # ---------------------------------------------------------------------------

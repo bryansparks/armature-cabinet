@@ -9,8 +9,10 @@ Cross-task invariants enforced here (the integration keystone):
   - hqs_promote_min is loaded from routing_rules.yaml (data-driven, NOT hardcoded).
   - FileProposal.evidence is populated with trace row ids from AgentTraceSummary.
   - --review forces every proposal to review-queue; auto surfaces are NOT auto-applied.
-  - lora_eligible surface -> handoff_to_adapter; if not trained, fall back to prose
-    and log missed_predictions.
+  - LoRA handoff is an orchestrator-level decide_lora step (not a router route):
+    when prose is exhausted (>=2 flat cycles) and the routed skill's tools fire,
+    hand off to adapter training; if not trained, fall back to prose and log
+    missed_predictions.
   - Cabinet never imports armature; lora_handoff shells out.
 """
 from __future__ import annotations
@@ -28,7 +30,7 @@ from .proposer import propose_edit
 from .patch_applier import apply_patch_to_folder, PatchReject
 from .versioning import (write_version, promote, ThresholdPromotionPolicy,
                          rollback as evolve_rollback, read_latest)
-from .lora_handoff import handoff_to_adapter
+from .lora_handoff import handoff_to_adapter, decide_lora
 from .types import FileProposal
 from .cycle_history import (read_history, append_record, prose_cycles_without_gain,
                             update_last_verified, detect_oscillation)
@@ -238,8 +240,13 @@ def run_evolve_cycle(folder: Path, *, traces_db: Path,
     decision = route(summary, skill_tools, rules=rules)
     hqs_promote_min = float(rules.get("hqs_promote_min", 0.02))
 
-    # lora_eligible surface branch (preserved; restructured in Task 8).
-    if decision.surface == "lora_eligible" and decision.skill_id:
+    # v2: LoRA is an orchestrator-level decision, not a router route. When prose
+    # is exhausted (>=2 flat prose cycles) and the routed skill's tools fire
+    # correctly, hand off to adapter training. If trained, skip prose. If not
+    # trained (or --apply not set), fall back to prose with lora_missed.
+    lora_rec = decide_lora(summary, prose_cycles_without_gain=prose_cycles,
+                          skill_id=decision.skill_id)
+    if lora_rec.eligible and decision.skill_id:
         role_type = pkg.manifest.get("kind", "worker")
         handoff = handoff_to_adapter(skill_id=decision.skill_id, role_type=role_type,
                                      dry_run=not apply)
