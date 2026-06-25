@@ -1,15 +1,25 @@
-# v1 routing table. The router is data-driven: thresholds and which surfaces are
+# v2 routing table. The router is data-driven: thresholds and which surfaces are
 # review-locked can be tuned here without touching router.py.
+#
+# target_file template contract: a value like "skills/{skill_id}.md" is a template
+# where {skill_id} is substituted from the routed failing skill. In the proposer's
+# prompt this resolved path is referred to via the FILE(<path>) marker. No other
+# template variables are supported.
 min_observations: 3            # a symptom must appear this many times to fire
 hqs_promote_min: 0.02         # promote a new version only if HQS improved by >= this
-auto_rollback_guardrail: true # roll back automatically if a guardrail-touched run regresses
+auto_rollback_guardrail: true # WIRED (v2): roll back unconditionally if a guardrail-touched run regresses
+rollback_threshold: 0.05      # v2: non-guardrail regressions roll back past this HQS drop
+
+latency_threshold_ms: 3000    # consumed by trace_reader -> HIGH_LATENCY (per-row)
+cost_threshold_tokens: 8000   # consumed by trace_reader -> HIGH_COST (per-row)
 
 surfaces:
   skills: auto
   mandate: auto
   "skills+soul": auto
+  config: auto                # cabinet.yaml — model tier / max_tokens edits (v2)
   guardrail: review            # hard-locked: --apply cannot override
-  lora_eligible: none           # handled by lora_handoff, not patch_applier
+  lora_eligible: none           # orchestrator-level (decide_lora), not a file edit
   none: none
 
 rules:
@@ -27,6 +37,14 @@ rules:
     symptom: LOW_SKILL_ACTIVATION
     target_file: "skills/{skill_id}.md"
     surface: "skills+soul"
+  - id: R4
+    symptom: HIGH_LATENCY
+    target_file: "cabinet.yaml"
+    surface: config
+  - id: R5
+    symptom: HIGH_COST
+    target_file: "cabinet.yaml"
+    surface: config
   - id: G1
     symptom: REFUSAL_OR_FALSE_HALT
     target_file: "brakes.md"

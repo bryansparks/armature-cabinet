@@ -87,3 +87,33 @@ def test_load_rules_returns_table():
     rules = load_rules()
     assert rules["min_observations"] == 3
     assert any(r["id"] == "R1" for r in rules["rules"])
+
+
+def _bare_summary(symptoms):
+    return AgentTraceSummary(
+        agent_id="a", agent_version="0.1.0", n_traces=5,
+        output_valid_rate=1.0, success_rate=1.0, quorum=0.5, escalation_rate=0.0,
+        hqs=0.5, dominant_symptoms=symptoms, per_skill={}, healthy_skills=[],
+        evidence_row_ids=[], heuristic=False,
+    )
+
+
+def test_r4_routes_high_latency_to_cabinet_yaml():
+    rules = load_rules()
+    assert "config" in rules["surfaces"]
+    assert rules["surfaces"]["config"] == "auto"
+    assert rules["rollback_threshold"] == 0.05
+    assert rules["latency_threshold_ms"] == 3000
+    assert rules["cost_threshold_tokens"] == 8000
+    dec = route(_bare_summary([("HIGH_LATENCY", 5)]), {}, rules=rules)
+    assert dec.rule_id == "R4"
+    assert dec.target_file == "cabinet.yaml"
+    assert dec.surface == "config"
+    assert dec.gate == "auto"
+
+
+def test_r5_routes_high_cost_to_cabinet_yaml():
+    dec = route(_bare_summary([("HIGH_COST", 5)]), {}, rules=load_rules())
+    assert dec.rule_id == "R5"
+    assert dec.target_file == "cabinet.yaml"
+    assert dec.surface == "config"
