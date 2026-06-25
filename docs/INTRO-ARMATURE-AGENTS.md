@@ -68,11 +68,39 @@ my-agent/
 └── context/*.md      # reference material (rubrics, schemas) referenced by skills
 ```
 
-`cabinet.yaml`, `soul.md`, and `mandate.md` are **required**. `brakes`, `trust`,
-`skills/`, and `context/` are **optional** — declared in `blocks_extra` — but a
-real agent almost always has all of them. (An agent with no skills can still run;
-an agent with no brakes or trust just self-governs less. See each section below
-for what you lose by omitting it.)
+A well-formed cabinet agent authors all of these. To the compiler, only
+`cabinet.yaml` is structurally required (the loader raises if it's missing);
+`soul.md` and `mandate.md` are core but optional at load time, and `brakes`,
+`trust`, `skills/`, and `context/` are optional blocks declared in
+`blocks_extra`. A real agent almost always has all of them. (An agent with no
+skills can still run; an agent with no brakes or trust just self-governs less.
+See each section below for what you lose by omitting it.)
+
+> **What the validator actually enforces.** The tables in this doc describe the
+> *format contract* — what a well-formed agent authors. The compiler is more
+> permissive than the contract: it loads whatever folder you give it and produces
+> a (possibly degraded) bundle. `armature-cabinet validate` returns a small set
+> of hard errors and warnings rather than rejecting anything:
+>
+> **Hard errors (validation fails):**
+> - `cabinet.yaml` missing or empty `id`
+> - `cabinet.yaml` `kind` present but not `partner` / `clone`
+> - a skill with missing `id`, or a duplicate skill `id`
+> - a skill `context:` ref that points at no file in `context/`
+> - a `--skill <id>` naming a skill not in the folder
+>
+> **Warnings only (still compiles):** `cabinet.yaml` missing `name`, `kind`, or
+> `schema_version` (defaults are applied).
+>
+> **Not enforced at all:** the existence of `soul.md` / `mandate.md` and every
+> frontmatter field inside them (`role`, `expertise`, `standards`, `refusals`,
+> `goal`, `success_looks_like`, …); skill `name` / `when` / `tools` / `version`;
+> all `brakes` and `trust` fields. A thin or partial folder still compiles — it
+> just yields a shallower bundle.
+>
+> So in the per-section tables below, read the **Required** column as "expected
+> by the format contract," not "rejected by the validator." Only the hard errors
+> above block compilation.
 
 ---
 
@@ -414,7 +442,8 @@ run on judgment alone. That's a first-class case, not a degenerate one.
 |---|---|---|---|
 | `id` | yes | stable skill id (often `<agent>.<name>`) | `skill_library[id].id` |
 | `version` | yes | skill version | `x_version` |
-| `name` | yes | human-readable name | `skill_library[id].description` |
+| `name` | yes | human-readable name | fallback for `skill_library[id].description` |
+| `description` | no | one-line skill summary; preferred over `name` for the bundle's `description` | `skill_library[id].description` (preferred) |
 | `when` | yes | trigger / when to use it | `x_when` (and matches `--when`) |
 | `tools` | yes | list of `tool:action` strings (can be `[]`) | `x_tools` |
 | `context` | no | list of context-file refs the skill uses | `x_context` (resolved bodies) |
@@ -424,6 +453,11 @@ run on judgment alone. That's a first-class case, not a degenerate one.
 
 The **body** is the procedure itself — numbered steps or clear instructions. It
 becomes `skill_library[id].content`.
+
+> **`description` vs `name`:** the bundle's `skill_library[id].description` is the
+> first present of `description` → `name` → `when` → `id`. The optional
+> `description` lets you give a skill a cleaner one-line summary than its `name`
+> or trigger string; if you omit it, `name` (then `when`, then `id`) is used.
 
 **Example** (`agents/gmail-reader/skills/triage-inbox.md`):
 
@@ -505,7 +539,8 @@ Each part compiles into the bundle Armature runs (`{ role, skill_library }`):
   when…", "when you respond, always…". The model sees all of this on every turn.
 - **brakes (hard) + trust (escalation)** → the advisory `<id>.safety.yaml`
   fragment (block rules, contract limits, escalation gates) the workflow merges.
-- **skills** → `skill_library` (one entry per skill: `content` = body, plus
+- **skills** → `skill_library` (one entry per skill: `content` = body,
+  `description` = `description`→`name`→`when`→`id`, plus
   `x_when`/`x_tools`/`x_cost_tier`/`x_version`/`x_context`/`x_outputs`).
 - **context** → resolved into each citing skill's `x_context`.
 - **cabinet.yaml** → identity metadata (`x_source`, `x_kind`, `x_schema_version`,
