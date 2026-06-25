@@ -6,6 +6,7 @@ on Cabinet AgentVersion / HQS, not AdapterMetadata.
 """
 from __future__ import annotations
 import json
+import os
 import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -39,21 +40,37 @@ def _latest_file(folder: Path) -> Path:
 
 def write_version(folder: Path, *, version: str, hqs: float | None,
                   predicted_fixes: list[str] | None = None) -> AgentVersion:
+    """Snapshot the folder into versions/<version>/ ATOMICALLY.
+
+    Builds the snapshot in a hidden temp dir under .evolve/, then os.replace's
+    it into versions/<version>/. On any exception the temp dir is removed and
+    re-raised — no partial versions/<version>/ is ever left visible. The .evolve/
+    sidecar and the versions/ dir itself are excluded from the snapshot.
+    """
     vdir = _versions_dir(folder) / version
-    vdir.mkdir(parents=True, exist_ok=True)
-    for p in folder.iterdir():
-        if p.name == "versions":
-            continue
-        dest = vdir / p.name
-        if p.is_dir():
-            shutil.copytree(p, dest, dirs_exist_ok=True)
-        else:
-            shutil.copy2(p, dest)
-    av = AgentVersion(version=version, hqs=hqs, predicted_fixes=list(predicted_fixes or []))
-    (vdir / ".proposal.json").write_text(json.dumps({
-        "version": version, "hqs": hqs, "predicted_fixes": av.predicted_fixes,
-    }), encoding="utf-8")
-    return av
+    vdir.parent.mkdir(parents=True, exist_ok=True)
+    tmp = folder / ".evolve" / f".tmp-{version}-{os.getpid()}"
+    tmp.mkdir(parents=True, exist_ok=True)
+    try:
+        for p in folder.iterdir():
+            if p.name in ("versions", ".evolve"):
+                continue
+            dest = tmp / p.name
+            if p.is_dir():
+                shutil.copytree(p, dest, dirs_exist_ok=True)
+            else:
+                shutil.copy2(p, dest)
+        av = AgentVersion(version=version, hqs=hqs, predicted_fixes=list(predicted_fixes or []))
+        (tmp / ".proposal.json").write_text(json.dumps({
+            "version": version, "hqs": hqs, "predicted_fixes": av.predicted_fixes,
+        }), encoding="utf-8")
+        if vdir.exists():
+            shutil.rmtree(vdir)
+        os.replace(tmp, vdir)
+        return av
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
 
 
 def read_latest(folder: Path) -> str | None:
@@ -77,7 +94,7 @@ def rollback(folder: Path, version: str) -> None:
     if not vdir.exists():
         raise FileNotFoundError(f"version not found: {version}")
     for p in list(folder.iterdir()):
-        if p.name == "versions":
+        if p.name in ("versions", ".evolve"):
             continue
         if p.is_dir():
             shutil.rmtree(p)
