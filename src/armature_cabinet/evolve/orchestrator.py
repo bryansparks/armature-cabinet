@@ -196,6 +196,8 @@ def run_evolve_cycle(folder: Path, *, traces_db: Path,
                      rollback_threshold: float = 0.05,
                      auto_rollback_guardrail: bool = True,
                      oscillating: bool | None = None,
+                     latency_threshold_ms: float = 3000.0,
+                     cost_threshold_tokens: float = 8000.0,
                      ) -> CycleResult:
     """Run one evolve cycle. Returns a CycleResult describing what happened.
 
@@ -216,7 +218,9 @@ def run_evolve_cycle(folder: Path, *, traces_db: Path,
     prior_latest = read_latest(folder)
 
     summary = read_summary(traces_db, agent_id=agent_id, agent_version=agent_version,
-                           skill_tools=skill_tools, min_traces=MIN_TRACES)
+                           skill_tools=skill_tools, min_traces=MIN_TRACES,
+                           latency_threshold_ms=latency_threshold_ms,
+                           cost_threshold_tokens=cost_threshold_tokens)
     if summary is None:
         return CycleResult("none", None, "none", False,
                            rationale=f"insufficient traces (need >= {MIN_TRACES})")

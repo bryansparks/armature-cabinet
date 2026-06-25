@@ -648,3 +648,30 @@ def test_oscillation_forces_review(tmp_path: Path, monkeypatch):
     )
     assert res.gate == "review"
     assert res.applied is False
+
+
+def test_cli_threads_latency_cost_thresholds_to_reader(tmp_path: Path, monkeypatch):
+    """The CLI default cycle passes latency_threshold_ms / cost_threshold_tokens
+    from routing_rules.yaml into read_summary (via the orchestrator)."""
+    from armature_cabinet.evolve import orchestrator as orch
+    _make_agent(tmp_path)
+    db = tmp_path / "traces.db"
+    _seed_traces(db)
+    monkeypatch.setenv("ARMATURE_CABINET_LLM_STUB", "1")
+    captured = {}
+    real = orch.read_summary
+
+    def _spy(db_path, *, agent_id, agent_version, skill_tools, min_traces,
+             latency_threshold_ms=None, cost_threshold_tokens=None):
+        captured["lat"] = latency_threshold_ms
+        captured["cost"] = cost_threshold_tokens
+        return real(db_path, agent_id=agent_id, agent_version=agent_version,
+                    skill_tools=skill_tools, min_traces=min_traces,
+                    latency_threshold_ms=latency_threshold_ms,
+                    cost_threshold_tokens=cost_threshold_tokens)
+
+    monkeypatch.setattr(orch, "read_summary", _spy)
+    main(["evolve", str(tmp_path), "--traces-db", str(db), "--apply",
+          "--skill-tools", "triage=github:alerts"])
+    assert captured["lat"] == 3000
+    assert captured["cost"] == 8000

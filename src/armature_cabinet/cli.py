@@ -24,6 +24,8 @@ from .evolve.versioning import (
     ThresholdPromotionPolicy,
 )
 from .evolve.trace_reader import read_summary
+from .evolve.cycle_history import read_history, prose_cycles_without_gain
+from .evolve.router import load_rules
 
 
 def _dump(data, path: Path) -> None:
@@ -238,10 +240,13 @@ def cmd_evolve(args: argparse.Namespace) -> int:
             print("no promoted version to verify", file=sys.stderr)
             return 1
         prior = json.loads((folder / "versions" / latest / ".proposal.json").read_text(encoding="utf-8"))
+        rules = load_rules()
         summary = read_summary(Path(args.traces_db), agent_id=pkg.id,
                                agent_version=pkg.manifest.get("version"),
                                skill_tools=_parse_skill_tools(args.skill_tools),
-                               min_traces=1)
+                               min_traces=1,
+                               latency_threshold_ms=float(rules.get("latency_threshold_ms", 3000)),
+                               cost_threshold_tokens=float(rules.get("cost_threshold_tokens", 8000)))
         if summary is None:
             print("insufficient traces to verify", file=sys.stderr)
             return 1
@@ -278,11 +283,20 @@ def cmd_evolve(args: argparse.Namespace) -> int:
         )
         current_hqs = prior.get("hqs")
 
+    rules = load_rules()
+    history = read_history(folder)
+    prose_cycles = prose_cycles_without_gain(history)
+
     res = run_evolve_cycle(folder, traces_db=Path(args.traces_db),
                            skill_tools=_parse_skill_tools(args.skill_tools),
                            apply=args.apply, review=args.review,
                            current_version=pkg.manifest.get("version"),
-                           current_hqs=current_hqs)
+                           current_hqs=current_hqs,
+                           prose_cycles_without_gain_arg=prose_cycles,
+                           rollback_threshold=float(rules.get("rollback_threshold", 0.05)),
+                           auto_rollback_guardrail=bool(rules.get("auto_rollback_guardrail", True)),
+                           latency_threshold_ms=float(rules.get("latency_threshold_ms", 3000)),
+                           cost_threshold_tokens=float(rules.get("cost_threshold_tokens", 8000)))
     print(f"rule={res.rule_id} target={res.target_file} gate={res.gate} "
           f"applied={res.applied} version={res.version} promoted={res.promoted}")
     print(f"  {res.rationale}")
