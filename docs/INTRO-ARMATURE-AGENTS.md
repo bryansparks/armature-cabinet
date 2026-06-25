@@ -1,4 +1,4 @@
-# Into Armature Agents — what a cabinet agent *is*
+# Intro to Armature Agents — what a cabinet agent *is*
 
 > An onboarding doc for the **agent** itself: what one is, why it's more than a
 > prompt, and what each part of its folder does. If you only read one thing before
