@@ -146,7 +146,19 @@ def compile_agent(pkg: AgentPackage, *, include: list[str] | None = None) -> dic
         if val is not None:
             role[f"x_{_rich}"] = val
     skill_library = {s.id: _skill_entry(s, pkg) for s in skills}
-    return {"role": role, "skill_library": skill_library}
+    bundle: dict[str, Any] = {"role": role, "skill_library": skill_library}
+    block_rules = [
+        {
+            "tool": action,
+            "condition": None,  # None = matches every call (armature >= 0.5.0)
+            "action": "block",
+            "message": f"{pkg.name} is forbidden from '{action}'.",
+        }
+        for action in (pkg.brakes.get("forbidden_actions") or [])
+    ]
+    if block_rules:
+        bundle["safety_rules"] = block_rules
+    return bundle
 
 
 def compile_safety_fragment(pkg: AgentPackage) -> dict[str, Any]:

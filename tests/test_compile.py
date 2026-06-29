@@ -90,3 +90,24 @@ def test_grabbed_skill_md_description_becomes_skilldef_description(tmp_path):
     entry = b["skill_library"]["grabbed-skill"]  # id falls back to name
     assert entry["description"] == "A skill grabbed from the wild."
     assert "x_description" not in entry  # description is a known field, not extra
+
+
+def test_compile_emits_safety_rules():
+    pkg = load_package(FIX)
+    b = compile_agent(pkg)
+    forbidden = list(pkg.brakes.get("forbidden_actions") or [])
+    assert forbidden, "fixture should have forbidden_actions"
+    rules = b.get("safety_rules")
+    assert rules, "bundle should carry safety_rules when forbidden_actions is set"
+    assert len(rules) == len(forbidden)
+    assert {r["tool"] for r in rules} == set(forbidden)
+    for r in rules:
+        assert r["action"] == "block"
+        assert r["condition"] is None  # None = matches every call (not the old truthy hack)
+
+
+def test_compile_partner_without_forbidden_has_no_safety_rules(tmp_path):
+    (tmp_path / "cabinet.yaml").write_text("id: a\nname: A\nkind: partner\n", encoding="utf-8")
+    (tmp_path / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
+    b = compile_agent(load_package(tmp_path))
+    assert "safety_rules" not in b
