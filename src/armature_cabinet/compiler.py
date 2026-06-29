@@ -13,6 +13,7 @@ Output 2 — an advisory safety fragment (<id>.safety.yaml): the hard-enforcemen
 from __future__ import annotations
 from typing import Any
 
+from .errors import CabinetError
 from .model import AgentPackage, Skill
 
 # cabinet soul.type -> Armature RoleType (worker|orchestrator|judge|researcher)
@@ -122,6 +123,11 @@ def compile_agent(pkg: AgentPackage, *, include: list[str] | None = None) -> dic
     selection — the foundation for the woodshop `when`-based model). Default:
     attach all skills in the package.
     """
+    if pkg.kind == "clone" and not (pkg.brakes.get("forbidden_actions") or []):
+        raise CabinetError(
+            f"clone agent {pkg.id!r} has no forbidden_actions; a clone that acts "
+            f"unattended must declare hard brakes."
+        )
     skills = pkg.skills if include is None else [s for s in pkg.skills if s.id in include]
 
     tools = sorted({t for s in skills for t in s.tools})

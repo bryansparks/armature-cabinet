@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from armature_cabinet import load_package, compile_agent, compile_safety_fragment
 
 FIX = Path(__file__).parent / "fixtures" / "security-triage"
@@ -110,3 +112,13 @@ def test_compile_partner_without_forbidden_has_no_safety_rules(tmp_path):
     (tmp_path / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
     b = compile_agent(load_package(tmp_path))
     assert "safety_rules" not in b
+
+
+def test_compile_clone_no_brakes_raises(tmp_path):
+    from armature_cabinet.errors import CabinetError
+    root = tmp_path / "clone-agent"
+    root.mkdir()
+    (root / "cabinet.yaml").write_text("id: clone-agent\nname: Clone\nkind: clone\n", encoding="utf-8")
+    (root / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
+    with pytest.raises(CabinetError, match="forbidden_actions"):
+        compile_agent(load_package(root))

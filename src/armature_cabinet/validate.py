@@ -40,6 +40,11 @@ def validate_package(pkg: AgentPackage, include: list[str] | None = None) -> Val
         r.errors.append(
             f"cabinet.yaml: invalid kind {kind!r} (expected one of {sorted(_VALID_KINDS)})"
         )
+    if man.get("kind") == "clone" and not (pkg.brakes.get("forbidden_actions") or []):
+        r.errors.append(
+            f"clone agent {pkg.id!r}: a clone that acts unattended must declare "
+            f"forbidden_actions (hard brakes)."
+        )
     if not man.get("schema_version"):
         r.warnings.append("cabinet.yaml: missing 'schema_version'")
 
