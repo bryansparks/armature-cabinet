@@ -162,29 +162,24 @@ def compile_agent(pkg: AgentPackage, *, include: list[str] | None = None) -> dic
 
 
 def compile_safety_fragment(pkg: AgentPackage) -> dict[str, Any]:
-    """Advisory spec fragment for the hard enforcement a CompiledAgent can't carry."""
-    safety: list[dict[str, Any]] = []
-    for action in pkg.brakes.get("forbidden_actions") or []:
-        safety.append({
-            "tool": action,
-            "condition": {"field": "_", "op": "truthy"},
-            "action": "block",
-            "message": f"{pkg.name} is forbidden from '{action}'.",
-        })
+    """Advisory spec fragment for the hard enforcement a CompiledAgent can't carry.
 
+    Block rules (forbidden_actions) are emitted onto the bundle's `safety_rules`
+    by `compile_agent` (enforced there), so this fragment no longer carries them.
+    It holds only advisory limits (iteration cap, USD ceiling), suggested
+    escalation gates, and the merge-it-in `_note`.
+    """
     suggested_gates = []
     for cond in pkg.trust.get("escalate_when") or []:
         suggested_gates.append(str(cond))
 
     fragment: dict[str, Any] = {
         "_note": (
-            "ADVISORY. A CompiledAgent bundle carries role + skills only. These "
-            "rules enforce this agent's brakes/trust as HARD constraints — merge "
-            "them into your workflow's `safety:`/`contracts:` and add the gates."
+            "ADVISORY. The CompiledAgent bundle carries this agent's block rules "
+            "(`safety_rules`) as HARD constraints already. Merge these remaining "
+            "advisory limits (`contracts:`) and escalation gates into your workflow."
         ),
     }
-    if safety:
-        fragment["safety"] = safety
     contract: dict[str, Any] = {}
     if "max_iterations" in pkg.brakes:
         contract["max_iterations"] = pkg.brakes["max_iterations"]

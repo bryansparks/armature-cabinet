@@ -39,10 +39,9 @@ def test_thick_metadata_preserved():
     assert "github:secret-scanning.list_alerts" in entry["x_tools"]
 
 
-def test_safety_fragment_is_advisory_hard_enforcement():
+def test_safety_fragment_is_advisory_only():
     f = compile_safety_fragment(load_package(FIX))
-    blocked = {r["tool"] for r in f.get("safety", [])}
-    assert "merge_pr" in blocked and "write_to_repo" in blocked
+    assert "safety" not in f  # block rules moved to the bundle
     assert f["contracts"]["max_iterations"] == 10
     assert "_note" in f  # carries the "merge this in by hand" advisory
 

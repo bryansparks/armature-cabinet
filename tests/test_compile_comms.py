@@ -52,7 +52,6 @@ def test_comms_skill_outputs_passed_through():
 
 def test_comms_safety_fragment_is_advisory():
     f = compile_safety_fragment(load_package(FIX))
-    blocked = {r["tool"] for r in f.get("safety", [])}
-    assert "slack:post" in blocked and "email:send" in blocked
+    assert "safety" not in f  # block rules moved to the bundle
     assert f["contracts"]["max_iterations"] == 8
     assert "_note" in f
