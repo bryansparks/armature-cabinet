@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from armature_cabinet import load_package, compile_agent, compile_safety_fragment
 
 FIX = Path(__file__).parent / "fixtures" / "security-triage"
@@ -39,10 +41,9 @@ def test_thick_metadata_preserved():
     assert "github:secret-scanning.list_alerts" in entry["x_tools"]
 
 
-def test_safety_fragment_is_advisory_hard_enforcement():
+def test_safety_fragment_is_advisory_only():
     f = compile_safety_fragment(load_package(FIX))
-    blocked = {r["tool"] for r in f.get("safety", [])}
-    assert "merge_pr" in blocked and "write_to_repo" in blocked
+    assert "safety" not in f  # block rules moved to the bundle
     assert f["contracts"]["max_iterations"] == 10
     assert "_note" in f  # carries the "merge this in by hand" advisory
 
@@ -90,3 +91,55 @@ def test_grabbed_skill_md_description_becomes_skilldef_description(tmp_path):
     entry = b["skill_library"]["grabbed-skill"]  # id falls back to name
     assert entry["description"] == "A skill grabbed from the wild."
     assert "x_description" not in entry  # description is a known field, not extra
+
+
+def test_compile_emits_safety_rules():
+    pkg = load_package(FIX)
+    b = compile_agent(pkg)
+    forbidden = list(pkg.brakes.get("forbidden_actions") or [])
+    assert forbidden, "fixture should have forbidden_actions"
+    rules = b.get("safety_rules")
+    assert rules, "bundle should carry safety_rules when forbidden_actions is set"
+    assert len(rules) == len(forbidden)
+    assert {r["tool"] for r in rules} == set(forbidden)
+    for r in rules:
+        assert r["action"] == "block"
+        assert r["condition"] is None  # None = matches every call (not the old truthy hack)
+
+
+def test_compile_partner_without_forbidden_has_no_safety_rules(tmp_path):
+    (tmp_path / "cabinet.yaml").write_text("id: a\nname: A\nkind: partner\n", encoding="utf-8")
+    (tmp_path / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
+    b = compile_agent(load_package(tmp_path))
+    assert "safety_rules" not in b
+
+
+def test_compile_clone_no_brakes_raises(tmp_path):
+    from armature_cabinet.errors import CabinetError
+    root = tmp_path / "clone-agent"
+    root.mkdir()
+    (root / "cabinet.yaml").write_text("id: clone-agent\nname: Clone\nkind: clone\n", encoding="utf-8")
+    (root / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
+    with pytest.raises(CabinetError, match="forbidden_actions"):
+        compile_agent(load_package(root))
+
+
+def test_compile_clone_with_brakes_emits_safety_rules(tmp_path):
+    """A clone WITH forbidden_actions compiles and emits safety_rules — the
+    symmetric positive path to test_compile_clone_no_brakes_raises."""
+    root = tmp_path / "clone-with-brakes"
+    root.mkdir()
+    (root / "cabinet.yaml").write_text(
+        "id: clone-with-brakes\nname: Clone\nkind: clone\n", encoding="utf-8")
+    (root / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
+    (root / "brakes.md").write_text(
+        "---\nforbidden_actions:\n  - send_email\n---\nHard brakes.\n",
+        encoding="utf-8")
+    b = compile_agent(load_package(root))
+    rules = b["safety_rules"]
+    assert len(rules) == 1
+    assert rules[0]["tool"] == "send_email"
+    assert rules[0]["condition"] is None  # None = matches every call
+    assert rules[0]["action"] == "block"
+    desc = b["role"]["description"]
+    assert "never take these actions: send_email" in desc

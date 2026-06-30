@@ -13,6 +13,7 @@ Output 2 — an advisory safety fragment (<id>.safety.yaml): the hard-enforcemen
 from __future__ import annotations
 from typing import Any
 
+from .errors import CabinetError
 from .model import AgentPackage, Skill
 
 # cabinet soul.type -> Armature RoleType (worker|orchestrator|judge|researcher)
@@ -122,6 +123,11 @@ def compile_agent(pkg: AgentPackage, *, include: list[str] | None = None) -> dic
     selection — the foundation for the woodshop `when`-based model). Default:
     attach all skills in the package.
     """
+    if pkg.kind == "clone" and not (pkg.brakes.get("forbidden_actions") or []):
+        raise CabinetError(
+            f"clone agent {pkg.id!r} has no forbidden_actions; a clone that acts "
+            f"unattended must declare hard brakes."
+        )
     skills = pkg.skills if include is None else [s for s in pkg.skills if s.id in include]
 
     tools = sorted({t for s in skills for t in s.tools})
@@ -146,33 +152,40 @@ def compile_agent(pkg: AgentPackage, *, include: list[str] | None = None) -> dic
         if val is not None:
             role[f"x_{_rich}"] = val
     skill_library = {s.id: _skill_entry(s, pkg) for s in skills}
-    return {"role": role, "skill_library": skill_library}
+    bundle: dict[str, Any] = {"role": role, "skill_library": skill_library}
+    block_rules = [
+        {
+            "tool": action,
+            "condition": None,  # None = matches every call (armature >= 0.5.0)
+            "action": "block",
+            "message": f"{pkg.name} is forbidden from '{action}'.",
+        }
+        for action in (pkg.brakes.get("forbidden_actions") or [])
+    ]
+    if block_rules:
+        bundle["safety_rules"] = block_rules
+    return bundle
 
 
 def compile_safety_fragment(pkg: AgentPackage) -> dict[str, Any]:
-    """Advisory spec fragment for the hard enforcement a CompiledAgent can't carry."""
-    safety: list[dict[str, Any]] = []
-    for action in pkg.brakes.get("forbidden_actions") or []:
-        safety.append({
-            "tool": action,
-            "condition": {"field": "_", "op": "truthy"},
-            "action": "block",
-            "message": f"{pkg.name} is forbidden from '{action}'.",
-        })
+    """Advisory spec fragment for the hard enforcement a CompiledAgent can't carry.
 
+    Block rules (forbidden_actions) are emitted onto the bundle's `safety_rules`
+    by `compile_agent` (enforced there), so this fragment no longer carries them.
+    It holds only advisory limits (iteration cap, USD ceiling), suggested
+    escalation gates, and the merge-it-in `_note`.
+    """
     suggested_gates = []
     for cond in pkg.trust.get("escalate_when") or []:
         suggested_gates.append(str(cond))
 
     fragment: dict[str, Any] = {
         "_note": (
-            "ADVISORY. A CompiledAgent bundle carries role + skills only. These "
-            "rules enforce this agent's brakes/trust as HARD constraints — merge "
-            "them into your workflow's `safety:`/`contracts:` and add the gates."
+            "ADVISORY. The CompiledAgent bundle carries this agent's block rules "
+            "(`safety_rules`) as HARD constraints already. Merge these remaining "
+            "advisory limits (`contracts:`) and escalation gates into your workflow."
         ),
     }
-    if safety:
-        fragment["safety"] = safety
     contract: dict[str, Any] = {}
     if "max_iterations" in pkg.brakes:
         contract["max_iterations"] = pkg.brakes["max_iterations"]

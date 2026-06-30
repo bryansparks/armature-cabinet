@@ -216,3 +216,35 @@ def test_validate_when_no_match_warns_and_exits_zero(capsys):
     rc = main(["validate", str(FIX), "--when", "quantum entanglement"])
     assert rc == 0
     assert "no skills matched" in capsys.readouterr().err.lower()
+
+
+def _write_clone(tmp_path, forbidden=None):
+    root = tmp_path / "clone-agent"
+    root.mkdir()
+    (root / "cabinet.yaml").write_text("id: clone-agent\nname: Clone\nkind: clone\n", encoding="utf-8")
+    (root / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
+    if forbidden:
+        lines = ["---", "forbidden_actions:"]
+        lines += [f"  - {f}" for f in forbidden]
+        lines += ["---", "body"]
+        (root / "brakes.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return root
+
+
+def test_validate_clone_requires_brakes(tmp_path):
+    r = validate_package(load_package(_write_clone(tmp_path, forbidden=None)))
+    assert not r.ok
+    assert any("forbidden_actions" in e for e in r.errors)
+
+
+def test_validate_clone_with_brakes_is_ok(tmp_path):
+    r = validate_package(load_package(_write_clone(tmp_path, forbidden=["send_email"])))
+    assert r.ok
+
+
+def test_validate_partner_without_brakes_is_ok(tmp_path):
+    root = tmp_path / "p"
+    root.mkdir()
+    (root / "cabinet.yaml").write_text("id: p\nname: P\nkind: partner\n", encoding="utf-8")
+    (root / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
+    assert validate_package(load_package(root)).ok

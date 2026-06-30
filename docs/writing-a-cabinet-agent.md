@@ -71,8 +71,9 @@ What each file is for:
 - **`mandate.md`** — purpose. The goal, what success looks like, and what is
   explicitly out of scope. Compiles into more `role.description` prose.
 - **`brakes.md`** — hard limits. Forbidden actions, halt-and-ask conditions,
-  iteration/cost ceilings. Compiles into `role.description` prose **and** into
-  hard `block` rules in `<id>.safety.yaml`.
+  iteration/cost ceilings. `forbidden_actions` compiles into `role.description`
+  prose **and** `block` rules on the bundle (`safety_rules`, armature ≥ 0.5.0);
+  the ceilings remain advisory in `<id>.safety.yaml`.
 - **`trust.yaml`** — response discipline. `show_work` / `cite_sources` /
   `uncertainty` compile into `role.description` prose; `escalate_when` compiles
   into `suggested_escalation_gates` in `<id>.safety.yaml`.
@@ -151,12 +152,13 @@ Purpose. YAML frontmatter + optional body.
 
 ### `brakes.md`
 
-Hard limits. YAML frontmatter + optional body. Produces **both** description
-prose and hard rules in `<id>.safety.yaml`.
+Hard limits. YAML frontmatter + optional body. Produces description prose,
+`block` rules on the bundle (`safety_rules`, armature ≥ 0.5.0), and advisory
+ceilings/gates in `<id>.safety.yaml`.
 
 | field | type | required? | allowed values | compiles to |
 |---|---|---|---|---|
-| `forbidden_actions` | list[string] | optional | tool ids (e.g. `slack:post`) | `role.description` prose ("…never take these actions: …") **and** `block` rules in `<id>.safety.yaml` |
+| `forbidden_actions` | list[string] | optional | tool ids (e.g. `slack:post`) | `role.description` prose ("…never take these actions: …") **and** `safety_rules` (`block`, `condition: null`) on the bundle — enforced when a workflow references the agent (armature ≥ 0.5.0) |
 | `halt_and_ask_when` | list[string] | optional | any conditions | `role.description` prose: "Stop and hand back to a human when:\n- …" |
 | `max_iterations` | integer | optional | positive integer | `contracts.max_iterations` in `<id>.safety.yaml` |
 | `cost_ceiling_usd` | number | optional | any number | `contracts._cost_ceiling_usd` in `<id>.safety.yaml` (note: no USD field in core yet) |
@@ -218,7 +220,7 @@ The full source-to-bundle mapping, verbatim from the M1–M4 compiler:
 | `mandate.md` `goal` | `role.description` prose: "Your mandate: …" |
 | `mandate.md` `success_looks_like` (list) | `role.description` prose: "Success looks like:\n- …" |
 | `mandate.md` `out_of_scope` (list) | `role.description` prose: "Out of scope: …" |
-| `brakes.md` `forbidden_actions` (list) | `role.description` prose ("…never take these actions: …") **and** `block` rules in `<id>.safety.yaml` |
+| `brakes.md` `forbidden_actions` (list) | `role.description` prose **and** `safety_rules` (`block`, `condition: null`) on the bundle — enforced when a workflow references the agent (armature ≥ 0.5.0); merged as a non-overridable floor |
 | `brakes.md` `halt_and_ask_when` (list) | `role.description` prose: "Stop and hand back to a human when:\n- …" |
 | `brakes.md` `max_iterations` | `contracts.max_iterations` in `<id>.safety.yaml` |
 | `brakes.md` `cost_ceiling_usd` | `contracts._cost_ceiling_usd` in `<id>.safety.yaml` (note: no USD field in core yet) |
@@ -252,6 +254,9 @@ one-line message, not a Python traceback. Errors exit 1; warnings exit 0.
 - skill `id` empty
 - a `--skill` id not present in the package
 - a skill `context` ref that does not resolve to a `context/*.md` file
+- **`kind: clone` must declare `forbidden_actions`.** A clone that acts unattended
+  with no hard brakes is a hard error at `validate` *and* `build`. Partner agents
+  may omit brakes (they recommend only).
 
 **Warnings (exit 0):**
 - `name` missing (defaults to `id`)
@@ -376,7 +381,7 @@ is drafting: audience, evidence, cadence — nothing more.
 ### 5.4 `brakes.md`
 
 Hard limits. `forbidden_actions` compiles into **both** description prose and
-`block` rules in `<id>.safety.yaml`; `halt_and_ask_when` into prose;
+`block` rules on the bundle (`safety_rules`, armature ≥ 0.5.0); `halt_and_ask_when` into prose;
 `max_iterations` and `cost_ceiling_usd` into `contracts` in the safety
 fragment.
 
@@ -535,7 +540,7 @@ armature-cabinet build    <folder> [-o DIR] [--skill ID]... [--when "<task>"] [-
 armature-cabinet validate <folder> [--skill ID]... [--when "<task>"]
 ```
 
-- `build` writes `<out>/agent.yaml` (the `CompiledAgent` bundle) and `<out>/<id>.safety.yaml` (advisory, when brakes/trust have hard content).
+- `build` writes `<out>/agent.yaml` (the `CompiledAgent` bundle, carrying `safety_rules`) and `<out>/<id>.safety.yaml` (advisory limits/gates, when brakes/trust have advisory content).
 - `validate` loads + validates + compiles in memory; writes nothing; exit 0 clean / 1 on errors.
 - `--skill <id>` (repeatable): attach only the named skills.
 - `--when "<task>"`: woodshop selection — keyword-overlap match against each skill's `when`; selects skills sharing ≥1 content keyword, ranked by overlap count (ties → source order); no-match → warning + a 0-skill bundle + exit 0. `validate --when` previews the ranked selection.
@@ -586,11 +591,14 @@ ok: incident-comms (partner)
 
 ## 7. Guardrails
 
-A CompiledAgent bundle carries only `role` + `skill_library` — it has no
-native notion of hard safety. `armature-cabinet build` therefore emits an
-**advisory** `<id>.safety.yaml` fragment alongside `agent.yaml` whenever
-`brakes.md` or `trust.yaml` contribute hard content. Merging that fragment
-into your workflow is what turns the brakes into enforced constraints.
+A CompiledAgent bundle carries `role` + `skill_library` + `safety_rules` —
+its `block` rules (from `brakes.forbidden_actions`) are a hard, non-overridable
+floor that armature auto-merges into the workflow at load (armature ≥ 0.5.0).
+`armature-cabinet build` also emits an **advisory** `<id>.safety.yaml` fragment
+alongside `agent.yaml` whenever `brakes.md` or `trust.yaml` contribute advisory
+content (iteration cap, USD ceiling, escalation gates). Merge that fragment's
+advisory limits into your workflow by hand — the runtime does not enforce them
+(unlike the bundle's `block` rules, which are).
 
 ### The soft / hard split
 
@@ -598,10 +606,15 @@ into your workflow is what turns the brakes into enforced constraints.
   "Stop and hand back to a human when", "never take these actions", and
   "When you respond, always" blocks. The model reads them as instructions.
   They shape behavior but are not enforced by the runtime.
-- **Hard guardrails** live in `<id>.safety.yaml` — `block` rules for each
-  `forbidden_actions` entry, `contracts.max_iterations` /
-  `contracts._cost_ceiling_usd`, and `suggested_escalation_gates` from
-  `trust.yaml`. The runtime enforces these as constraints, not suggestions.
+- **Hard guardrails (block rules)** live on the bundle's `safety_rules` —
+  `block` rules for each `forbidden_actions` entry. The runtime enforces these
+  as constraints, not suggestions, when a workflow references the agent
+  (armature ≥ 0.5.0); merged as a non-overridable floor. On older core they
+  degrade to soft prose only.
+- **Advisory limits** remain in `<id>.safety.yaml` —
+  `contracts.max_iterations` / `contracts._cost_ceiling_usd` and
+  `suggested_escalation_gates` from `trust.yaml`. The runtime does not enforce
+  these yet; merge them into your workflow by hand.
 
 Both come from the same source fields (`forbidden_actions` produces *both*
 prose and `block` rules), so the soft voice and the hard rule stay in sync by
@@ -612,15 +625,9 @@ construction.
 For `incident-comms`, `build` emits `incident-comms.safety.yaml`:
 
 ```yaml
-_note: "ADVISORY. A CompiledAgent bundle carries role + skills only. These rules enforce this agent's
-  brakes/trust as HARD constraints — merge them into your workflow's `safety:`/`contracts:` and
-  add the gates."
-safety:
-- tool: slack:post
-  condition: { field: _, op: truthy }
-  action: block
-  message: Incident Comms Partner is forbidden from 'slack:post'.
-# ... one block rule per forbidden_actions entry ...
+_note: "ADVISORY. The CompiledAgent bundle carries this agent's block rules
+  (`safety_rules`) as HARD constraints already. Merge these remaining advisory
+  limits (`contracts:`) and escalation gates into your workflow."
 contracts:
   max_iterations: 8
   _cost_ceiling_usd: 1.0
@@ -633,10 +640,12 @@ suggested_escalation_gates:
 
 ### Merging into a workflow
 
-Take the fragment's `safety:` list into your workflow's `safety:` section,
-`contracts:` into `contracts:`, and wire `suggested_escalation_gates` into
-your workflow's escalation gates. `--no-safety` skips emitting the fragment
-when you don't want it.
+The bundle's `block` rules (`safety_rules`) are **auto-merged** into the
+workflow's `safety_rules` at load when a workflow references the agent
+(armature ≥ 0.5.0) — as a non-overridable floor. You do not hand-merge those.
+The fragment's remaining advisory `contracts:` and `suggested_escalation_gates`
+still need manual merge into your workflow. `--no-safety` skips emitting the
+fragment when you don't want it.
 
 ---
 
