@@ -18,7 +18,7 @@ it only ever loads a standard `CompiledAgent`.
 ```
                 author                     compile                    run
   cabinet agent folder  ──armature-cabinet build──▶  agent.yaml  ──armature run──▶  workflow
-  (soul, skills, brakes...)                          (role + skills)
+  (soul, skills, brakes...)                    (role + skills + safety_rules)
 ```
 
 ## The cabinet folder
@@ -48,7 +48,7 @@ and as proof the format isn't shaped to one domain:
 
 | Agent | Kind / role type | Shows |
 |---|---|---|
-| `gmail-reader` | partner / worker | read-only Gmail triage; all-tooled skills; the safety fragment as the hard-enforcement handoff for destructive actions |
+| `gmail-reader` | partner / worker | read-only Gmail triage; all-tooled skills; destructive actions blocked via the bundle's `safety_rules` (armature ≥ 0.5.0) |
 | `research-synthesis` | partner / researcher | the `researcher` role-type override; web/pdf tools; **empty-tools** (pure-reasoning) skills |
 | `marketing-ideator` | partner / worker | generates 3+ candidate messages from a seed |
 | `marketing-debater` | partner / worker | critiques candidates on clarity, resonance, risk, brand-fit, over-claiming |
@@ -105,7 +105,7 @@ Produces:
 | `mandate.md` `goal` | `role.description` prose: "Your mandate: …" |
 | `mandate.md` `success_looks_like` (list) | `role.description` prose: "Success looks like:\n- …" |
 | `mandate.md` `out_of_scope` (list) | `role.description` prose: "Out of scope: …" |
-| `brakes.md` `forbidden_actions` (list) | `role.description` prose **and** `block` rules in `<id>.safety.yaml` |
+| `brakes.md` `forbidden_actions` (list) | `role.description` prose **and** `safety_rules` (`block`) on the bundle — enforced when merged at load (armature ≥ 0.5.0) |
 | `brakes.md` `halt_and_ask_when` | `role.description` prose (e.g. "Stop and hand back to a human when: …") |
 | `brakes.md` `max_iterations` / `cost_ceiling_usd` | `contracts.*` in `<id>.safety.yaml`[^cc] |
 | `trust.yaml` `show_work`/`cite_sources`/`uncertainty` | `role.description` prose: "When you respond, always:\n- …" |
@@ -128,19 +128,25 @@ contract field in Armature core yet, hence the leading underscore).
 
 ## The one thing to know about guardrails
 
-A `CompiledAgent` carries **role + skills only** — not `Contract` limits,
-`ToolSafetyRule`s, or gates. So an agent's **brakes and trust can't be enforced
-from inside the bundle**. `armature-cabinet` handles this two ways:
+A `CompiledAgent` carries **role + skills + `safety_rules`**. As of armature
+0.5.0, a bundle's `block` rules (from `brakes.forbidden_actions`) are **enforced**:
+when a workflow references the agent, armature merges the rules into the
+workflow's `safety_rules` at load. An agent's `block` rules are a **non-overridable
+floor** — a workflow can only add restrictions, never remove them; a workflow
+`allow` on a tool the agent forbids is dropped, and the agent's block fires first.
+Soft (automatic): the behavioral intent (recommends-only, refusals, halt-and-ask,
+show-work, cite, flag-uncertainty) is folded into the role's prose, so the agent
+self-governs even on older core.
 
-1. **Soft (automatic):** the behavioral intent (recommends-only, refusals,
-   halt-and-ask, show-work, cite, flag-uncertainty) is folded into the role's
-   prose, so the agent self-governs.
-2. **Hard (advisory):** a `*.safety.yaml` fragment is emitted with the
-   `block` rules, contract limits, and suggested escalation gates. You merge it
-   into your workflow's `safety:` / `contracts:` sections by hand.
+**Prerequisite:** enforcement requires armature ≥ 0.5.0. On older core, the
+bundle's `safety_rules` are silently ignored (degraded to soft-prose only —
+not broken, not enforced).
 
-Making bundles able to *carry* their own safety/contract is the next candidate
-change to Armature core. Until then, hard enforcement is opt-in at the workflow.
+**Still advisory** (the bundle cannot carry these yet — no enforced core target):
+the USD cost ceiling, the iteration cap, and suggested escalation gates. These
+remain in the `*.safety.yaml` fragment for you to merge by hand. A `clone` agent
+without `forbidden_actions` is a hard compile/validate error — a clone that acts
+unattended must declare hard brakes.
 
 ## Compile-time skill selection
 
@@ -185,9 +191,9 @@ For authoring an agent, see [writing a cabinet agent](docs/writing-a-cabinet-age
 
 ## Status
 
-Early / experimental (`0.1.0`). The compiler core is stable — unchanged since the
-M3 milestone, 76 tests, ruff-clean, and it round-trips through real
-`armature 0.3.5` end-to-end. The authoring surfaces (the `new` wizard, library
+Early / experimental (`0.2.0`). The compiler core is stable, ruff-clean, and it
+round-trips through real `armature 0.5.0` end-to-end. Bundle `safety_rules`
+enforcement requires armature ≥ 0.5.0. The authoring surfaces (the `new` wizard, library
 `list`/`build --all`, and `team` generation) are newer. Reference agents are
 `maturity: L1`. See [`NEXT-STEPS.md`](NEXT-STEPS.md) for what's deferred.
 
