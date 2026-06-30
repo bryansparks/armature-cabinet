@@ -122,3 +122,24 @@ def test_compile_clone_no_brakes_raises(tmp_path):
     (root / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
     with pytest.raises(CabinetError, match="forbidden_actions"):
         compile_agent(load_package(root))
+
+
+def test_compile_clone_with_brakes_emits_safety_rules(tmp_path):
+    """A clone WITH forbidden_actions compiles and emits safety_rules — the
+    symmetric positive path to test_compile_clone_no_brakes_raises."""
+    root = tmp_path / "clone-with-brakes"
+    root.mkdir()
+    (root / "cabinet.yaml").write_text(
+        "id: clone-with-brakes\nname: Clone\nkind: clone\n", encoding="utf-8")
+    (root / "soul.md").write_text("---\nrole: R\n---\nbody\n", encoding="utf-8")
+    (root / "brakes.md").write_text(
+        "---\nforbidden_actions:\n  - send_email\n---\nHard brakes.\n",
+        encoding="utf-8")
+    b = compile_agent(load_package(root))
+    rules = b["safety_rules"]
+    assert len(rules) == 1
+    assert rules[0]["tool"] == "send_email"
+    assert rules[0]["condition"] is None  # None = matches every call
+    assert rules[0]["action"] == "block"
+    desc = b["role"]["description"]
+    assert "never take these actions: send_email" in desc
